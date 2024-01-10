@@ -35,6 +35,7 @@ install_dependencies() {
 
     install_package avahi-daemon
     install_package x11vnc
+    install_package pulseaudio
     install_package ffmpeg
     install_package nginx
 
@@ -126,7 +127,7 @@ start_stream() {
     check_dependencies
 
     x11vnc -clip 1920x1080+0+0 -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
-    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -c:v libx264 -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 &
+    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 &
 
     echo "Streaming is now available at http://$my_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
 }
