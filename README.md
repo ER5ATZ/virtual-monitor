@@ -16,13 +16,13 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream using 
 
     ```bash
     git clone https://github.com/ER5ATZ/virtual-monitor.git
-    cd virtual-monitor-stream
+    cd virtual-monitor
     ```
 
 2. Make the script executable:
 
     ```bash
-    chmod +x virtual-monitor.sh
+    sudo chmod +x ./virtual-monitor.sh
     ```
 
 3. Run the installation:
