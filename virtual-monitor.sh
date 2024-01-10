@@ -52,6 +52,7 @@ set_hostname() {
         hostname_controller="hostname"
         current_hostname=$(cat /etc/hostname)
     else
+        current_hostname="localhost"
         error_host
     fi
 
@@ -85,7 +86,7 @@ set_hostname() {
           </video>
       </body>
     </html>
-    EOF
+EOF
 
     sudo rm /etc/nginx/sites-available/default
     sudo rm /etc/nginx/sites-enabled/default
@@ -113,7 +114,7 @@ set_hostname() {
             add_header Cache-Control no-cache;
         }
     }
-    EOF
+EOF
 
     sudo ln -s /etc/nginx/sites-available/$my_hostname /etc/nginx/sites-enabled/
     if command -v nginx &> /dev/null; then
@@ -127,7 +128,7 @@ start_stream() {
     x11vnc -clip 1920x1080+0+0 -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
     ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -c:v libx264 -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 &
 
-    echo "Streaming is now available at http://$my_hostname/ or http://localhost/ (or any individual name you might have set)."
+    echo "Streaming is now available at http://$my_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
 }
 
 stop_stream() {
@@ -148,7 +149,7 @@ check_dependencies() {
         error_install "Nginx"
     fi
 
-    current_hostname=""
+    current_hostname="localhost"
     if command -v hostnamectl &> /dev/null; then
         current_hostname=$(hostnamectl --static)
     elif [ -f /etc/hostname ]; then
@@ -157,9 +158,8 @@ check_dependencies() {
         error_host
     fi
 
-    if [ "$current_hostname" == "" || !("$current_hostname" == "localhost" || "$current_hostname" == "virtualmonitor") ]; then
+    if [ "$current_hostname" == "" || "$current_hostname" == "localhost" ]; then
         echo "Hostname is not set. Please run 'sudo virtual-monitor hostname' first."
-        exit 1
     fi
 }
 
@@ -181,7 +181,7 @@ help() {
 }
 
 error_install() {
-    echo "$1 is not installed. Please run 'sudo $script_name" install' first."
+    echo "$1 is not installed. Please run 'sudo $script_name install' first."
     exit 1
 }
 
@@ -191,10 +191,9 @@ error_package() {
 }
 
 error_host() {
-    # Not a great solution, we may make the hostname optional later on and just go with the network IP
     echo "Please check your system configuration for the presence of 'hostnamectl' or '/etc/hostname'."
     echo "If neither is available, you may need to set the hostname manually somehow."
-    exit 1
+    echo "Meanwhile, you can still access the stream via http://<this machine's ip address in the network>."
 }
 
 case "$1" in
