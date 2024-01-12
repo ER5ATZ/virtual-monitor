@@ -19,11 +19,11 @@ install_dependencies() {
         error_package
     fi
 
-    install_package avahi-daemon package_manager
-    install_package x11vnc package_manager
-    install_package pulseaudio package_manager
-    install_package ffmpeg package_manager
-    install_package nginx package_manager
+    install_package avahi-daemon $package_manager
+    install_package x11vnc $package_manager
+    install_package pulseaudio $package_manager
+    install_package ffmpeg $package_manager
+    install_package nginx $package_manager
 
     set_hostname
 }
@@ -172,7 +172,7 @@ install_package() {
     }
 
 help() {
-    echo "Usage: ./$0 {install|host|check|start|stop|help}"
+    echo "Usage: $0 {install|host|check|start|stop|help}"
     echo "  install        Install dependencies and set up the virtual monitor"
     echo "  host (<name>)  Set the hostname, default is virtualmonitor"
     echo "  check          Check if all dependencies are set up"
