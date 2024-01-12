@@ -107,18 +107,67 @@ update_nginx() {
 }
 
 start_stream() {
-    current_hostname=$my_hostname
-    dependencies_check=$(check_dependencies)
-    if [[ $dependencies_check == $SUCCESS_MSG* ]]; then
-        current_hostname=${dependencies_check#"$SUCCESS_MSG"}
-        current_hostname=${current_hostname%"."*}
-    fi
-
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    current_hostname=$my_hostname
     screen_resolution=$(get_screen_resolution)
+    frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
+    monitor=0
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            -m|--mirror)
+                monitor=1
+                screen_resolution=$(get_screen_resolution)
+                ;;
+            -e|--extend)
+                monitor=2
+                shift
+                ;;
+            -r|--resolution)
+                if [ "$monitor" == 2 ]; then
+                    echo "Mirroring is not supported with custom resolution."
+                    exit 1
+                fi
+                screen_resolution=$2
+                shift
+                ;;
+            -f|--frame-rate)
+                if [ "$monitor" == 2 ]; then
+                    echo "Mirroring is not supported with custom frame rate."
+                    exit 1
+                fi
+                frame_rate=$2
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+        shift
+    done
 
     echo "Starting x11vnc..."
-    x11vnc -clip "$screen_resolution" -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
+    start_x11vnc "$monitor" "$screen_resolution"
+
+    echo "Starting FFmpeg..."
+    start_ffmpeg "$monitor" "$screen_resolution" "$frame_rate" "$base_dir"
+
+    if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
+        echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
+    else
+        echo "Failed to start the stream. Check $base_dir/tmp/ffmpeg.log for details."
+        exit 1
+    fi
+}
+
+start_x11vnc() {
+    if [ "$1" == 1 ]; then
+        x11vnc -clip "$2" -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
+    else
+        x11vnc -display :0 -nopw -xkb -noxrecord -noxfixes -noxdamage -forever &
+    fi
+
     x11vnc_pid=$!
     trap 'kill $x11vnc_pid' EXIT
 
@@ -131,10 +180,15 @@ start_stream() {
     fi
 
     sleep 5
+}
 
-    echo "Starting FFmpeg..."
-    frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
-    ffmpeg -f x11grab -s "$screen_resolution" -framerate "$frame_rate" -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$base_dir/tmp/ffmpeg.log" 2>&1 &
+start_ffmpeg() {
+    if [ "$1" = 2 ]; then
+        ffmpeg -f x11grab -video_size "$2" -framerate "$3" -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
+    else
+        ffmpeg -f x11grab -s "$2" -framerate "$3" -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
+    fi
+
     ffmpeg_pid=$!
     trap 'kill $x11vnc_pid; kill $ffmpeg_pid' EXIT
 
@@ -148,17 +202,17 @@ start_stream() {
     fi
 
     sleep 5
-
-    if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
-        echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
-    else
-        echo "Failed to start the stream. Check /tmp/ffmpeg.log for details."
-        exit 1
-    fi
 }
 
 get_screen_resolution() {
-    xdpyinfo | awk '/dimensions:/ {print $2}'
+    resolution=$(xdpyinfo | awk '/dimensions:/ {print $2}')
+
+    if [ -z "$resolution" ]; then
+        echo "Error: Unable to retrieve screen resolution. Using default resolution 800x600."
+        echo "800x600"
+    else
+        echo "$resolution"
+    fi
 }
 
 
@@ -224,7 +278,11 @@ help() {
     echo "  install        Install dependencies and set up the virtual monitor."
     echo "  host (<name>)  Set the hostname, default is your machine's name or virtual.monitor."
     echo "  check          Check if all dependencies are set up."
-    echo "  start          Start the virtual monitor stream."
+    echo "  start          Start the virtual monitor stream. By default as --mirror, all arguments are optional."
+    echo "  start  (-m | --mirror)  Start the virtual monitor stream as mirror with same resolution and frame rate."
+    echo "  start  (-e | --extend)  Start the virtual monitor stream as extension of main display with same resolution and frame rate."
+    echo "  start  -e (-r | --resolution)  Start the virtual monitor stream as extension with specific resolution."
+    echo "  start  -e (-f | --frame-rate)  Start the virtual monitor stream as extension with specific frame rate."
     echo "  stop           Stop the virtual monitor stream."
     echo "  help           Display this help message."
 }
@@ -260,7 +318,7 @@ case "$1" in
         ;;
     start)
         check_sudo "start"
-        start_stream
+        start_stream "$@"
         ;;
     stop)
         check_sudo "stop"
