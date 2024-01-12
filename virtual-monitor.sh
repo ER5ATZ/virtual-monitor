@@ -155,7 +155,7 @@ start_stream() {
     start_ffmpeg "$monitor" "$screen_resolution" "$frame_rate" "$base_dir"
 
     if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
-        sleep 15
+        sleep 1
         #echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
     else
         echo "Failed to start the stream. Check $base_dir/tmp/ffmpeg.log for details."
@@ -189,12 +189,12 @@ start_ffmpeg() {
         echo "Creating extension: ffmpeg -f x11grab -video_size $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
         -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0
         /tmp/hls/stream.m3u8 > $4/tmp/ffmpeg.log 2>&1 &"
-        ffmpeg -f x11grab -video_size "$2" -framerate "$3" -probesize 32M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
+        ffmpeg -loglevel 2 -f x11grab -video_size "$2" -framerate "$3" -probesize 32M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
     else
-        echo "Creagting mirror: ffmpeg -f x11grab -s $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
+        echo "Creating mirror: ffmpeg -f x11grab -s $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
         -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0
         /tmp/hls/stream.m3u8 > $4/tmp/ffmpeg.log 2>&1 &"
-        ffmpeg -f x11grab -s "$2" -framerate "$3" -probesize 32M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
+        ffmpeg -loglevel 2 -f x11grab -s "$2" -framerate "$3" -probesize 32M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
     fi
 
     ffmpeg_pid=$!
