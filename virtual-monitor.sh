@@ -57,6 +57,8 @@ set_hostname() {
         my_hostname="$current_hostname"
     fi
 
+    sudo rm -f /tmp/virtualmonitor.file
+
     HTML_MSG="
     <!DOCTYPE html>
     <html lang=\"en\">
@@ -107,62 +109,62 @@ set_hostname() {
     </body>
     </html>
     "
-    echo "$HTML_MSG" > tmp.file
-    sudo rm /var/www/html/index.html
+    echo "$HTML_MSG" > /tmp/virtualmonitor.file
+    sudo rm -f /var/www/html/index.html
     cat <<EOF | sudo tee /var/www/html/index.html
     $HTML_MSG
 EOF
 
-    if diff -q tmp.file /var/www/html/index.html >/dev/null; then
+    if diff -q /tmp/virtualmonitor.file /var/www/html/index.html >/dev/null; then
         echo "Could not write to /var/www/html/index.html"
         exit 1
     else
         echo "Wrote index page to /var/www/html/index.html"
     fi
 
-    sudo rm tmp.file
+    sudo rm /tmp/virtualmonitor.file
     sudo rm /etc/nginx/sites-available/default
     sudo rm /etc/nginx/sites-enabled/default
 
-  NGINX_MSG="
-  server {
-      listen 80 default_server;
-      listen [::]:80 default_server;
+    NGINX_MSG="
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
 
-      root /var/www/html;
-      index index.html;
+        root /var/www/html;
+        index index.html;
 
-      server_name _;
+        server_name _;
 
-      location / {
-          try_files \$uri \$uri/ =404;
-      }
+        location / {
+            try_files \$uri \$uri/ =404;
+        }
 
-      location /hls {
-          types {
-              application/vnd.apple.mpegurl m3u8;
-              video/mp2t ts;
-          }
-          alias /tmp/hls;
-          add_header Cache-Control no-cache;
-      }
-  }
+        location /hls {
+            types {
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+            alias /tmp/hls;
+            add_header Cache-Control no-cache;
+        }
+    }
   "
 
-  echo "$NGINX_MSG" > tmp.file
-  sudo rm /etc/nginx/sites-available/$my_hostname
+  echo "$NGINX_MSG" > /tmp/virtualmonitor.file
+  sudo rm -f /etc/nginx/sites-available/$my_hostname
   cat <<EOF | sudo tee /etc/nginx/sites-available/$my_hostname
   $NGINX_MSG
 EOF
 
-    if diff -q tmp.file /etc/nginx/sites-available/$my_hostname >/dev/null; then
+    if diff -q /tmp/virtualmonitor.file /etc/nginx/sites-available/$my_hostname >/dev/null; then
         echo "Could not write to /etc/nginx/sites-available/$my_hostname"
         exit 1
     else
         echo "Wrote nginx config to /etc/nginx/sites-available/$my_hostname"
     fi
 
-    sudo rm tmp.file
+    sudo rm /tmp/virtualmonitor.file
     sudo ln -s /etc/nginx/sites-available/$my_hostname /etc/nginx/sites-enabled/
 
     if command -v nginx &> /dev/null; then
