@@ -117,10 +117,10 @@ start_stream() {
         case $1 in
             -m|--mirror)
                 monitor=1
-                screen_resolution=$(get_screen_resolution)
                 ;;
             -e|--extend)
                 monitor=2
+                monitor=1
                 shift
                 ;;
             -r|--resolution)
@@ -140,8 +140,8 @@ start_stream() {
                 shift
                 ;;
             *)
-                echo "Unknown option: $1"
-                exit 1
+                echo "Starting with default options."
+                monitor=1
                 ;;
         esac
         shift
@@ -219,6 +219,8 @@ get_screen_resolution() {
 stop_stream() {
     pkill x11vnc
     pkill ffmpeg
+
+    sleep 5
 
     echo "Streaming stopped."
 }

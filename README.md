@@ -17,6 +17,8 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream using 
     ```bash
     git clone https://github.com/ER5ATZ/virtual-monitor.git
     cd virtual-monitor
+    git update-index --skip-worktree tmp/ffmpeg.log 
+
     ```
 
 2. Make the script executable:
