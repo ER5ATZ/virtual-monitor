@@ -189,12 +189,12 @@ start_ffmpeg() {
         echo "Creating extension: ffmpeg -f x11grab -video_size $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
         -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0
         /tmp/hls/stream.m3u8 > $4/tmp/ffmpeg.log 2>&1 &"
-        ffmpeg -loglevel 2 -f x11grab -video_size "$2" -framerate "$3" -probesize 200M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
+        ffmpeg -loglevel warning -f x11grab -video_size "$2" -framerate "$3" -probesize 200M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
     else
         echo "Creating mirror: ffmpeg -f x11grab -s $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
         -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0
         /tmp/hls/stream.m3u8 > $4/tmp/ffmpeg.log 2>&1 &"
-        ffmpeg -loglevel 2 -f x11grab -s "$2" -framerate "$3" -probesize 200M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
+        ffmpeg -loglevel warning -f x11grab -s "$2" -framerate "$3" -probesize 200M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
     fi
 
     ffmpeg_pid=$!
