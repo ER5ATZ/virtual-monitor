@@ -1,8 +1,8 @@
 #!/bin/bash
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-script_name="$(basename "${BASH_SOURCE[0]}")"
-alias virtual-monitor=". '$script_dir/$script_name'"
+#script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#script_name="$(basename "${BASH_SOURCE[0]}")"
+#alias virtual-monitor=". '$script_dir/$script_name'"
 
 my_hostname='virtualmonitor'
 
@@ -19,25 +19,11 @@ install_dependencies() {
         error_package
     fi
 
-    install_package() {
-        package=$1
-        if ! command -v "$package" &> /dev/null; then
-            echo "$package is not installed. Installing..."
-            if [ "$package_manager" == "apt" ]; then
-                sudo apt install -y "$package"
-            elif [ "$package_manager" == "apt-get" ]; then
-                sudo apt-get install -y "$package"
-            else
-                error_package
-            fi
-        fi
-    }
-
-    install_package avahi-daemon
-    install_package x11vnc
-    install_package pulseaudio
-    install_package ffmpeg
-    install_package nginx
+    install_package avahi-daemon package_manager
+    install_package x11vnc package_manager
+    install_package pulseaudio package_manager
+    install_package ffmpeg package_manager
+    install_package nginx package_manager
 
     set_hostname
 }
@@ -159,20 +145,34 @@ check_dependencies() {
         error_host
     fi
 
-    if [ "$current_hostname" == "" || "$current_hostname" == "localhost" ]; then
+    if [ "$current_hostname" == "" ] || [ "$current_hostname" == "localhost" ]; then
         echo "Hostname is not set. Please run 'sudo virtual-monitor hostname' first."
     fi
 }
 
 check_sudo() {
     if [[ $EUID -ne 0 ]]; then
-        echo "This command must be run with sudo. Please use 'sudo virtual-monitor <command>' instead."
+        echo "This command must be run with sudo. Please use 'sudo virtual-monitor <$1>' instead."
         exit 1
     fi
 }
 
+install_package() {
+        package=$1
+        if ! command -v "$package" &> /dev/null; then
+            echo "$package is not installed. Installing..."
+            if [ "$2" == "apt" ]; then
+                sudo apt install -y "$package"
+            elif [ "$2" == "apt-get" ]; then
+                sudo apt-get install -y "$package"
+            else
+                error_package
+            fi
+        fi
+    }
+
 help() {
-    echo "Usage: ./$script_name {install|start|stop|help}"
+    echo "Usage: ./$0 {install|host|check|start|stop|help}"
     echo "  install        Install dependencies and set up the virtual monitor"
     echo "  host (<name>)  Set the hostname, default is virtualmonitor"
     echo "  check          Check if all dependencies are set up"
@@ -182,7 +182,7 @@ help() {
 }
 
 error_install() {
-    echo "$1 is not installed. Please run 'sudo $script_name install' first."
+    echo "$1 is not installed. Please run 'sudo $0 install' first."
     exit 1
 }
 
@@ -199,16 +199,12 @@ error_host() {
 
 case "$1" in
     install)
-        check_sudo
+        check_sudo "install"
         install_dependencies
         ;;
     host)
-        check_sudo
-        set_hostname
-        ;;
-    host *)
-        check_sudo
-        my_hostname="${1:1}"
+        check_sudo "host"
+        my_hostname="${2:$my_hostname}"
         set_hostname
         ;;
     check)
@@ -230,5 +226,3 @@ case "$1" in
 esac
 
 exit 0
-
-}
