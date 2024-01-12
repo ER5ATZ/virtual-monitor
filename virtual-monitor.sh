@@ -69,8 +69,8 @@ update_html() {
     echo "Updating HTML..."
 
     html_msg=$(<"$1/html.template")
-    html_msg=${html_msg//\$\{my_hostname_placeholder\}/$2}
-
+    html_msg=${html_msg//\$my_hostname_placeholder/$2}
+    # html_msg=${html_msg//my_hostname_placeholder/$2}
     sudo rm -f /var/www/html/index.html
     echo "$html_msg" | sudo tee /var/www/html/index.html > /dev/null
 
