@@ -19,7 +19,7 @@ install_dependencies() {
 
     install_package avahi-daemon $package_manager
     install_package x11vnc $package_manager
-    install_package xdpyinfo $package_manager
+    #install_package xdpyinfo $package_manager
     install_package pulseaudio $package_manager
     install_package ffmpeg $package_manager
     install_package nginx $package_manager
@@ -109,8 +109,9 @@ update_nginx() {
 start_stream() {
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     current_hostname=$my_hostname
-    screen_resolution=$(get_screen_resolution)
-    frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
+    xrandr_output=$(xrandr --verbose)
+    screen_resolution=$(get_screen_resolution "$xrandr_output")
+    frame_rate=$(get_frame_rate "$xrandr_output")
     monitor=0
 
     while [[ "$#" -gt 0 ]]; do
@@ -211,7 +212,8 @@ start_ffmpeg() {
 }
 
 get_screen_resolution() {
-    resolution=$(xdpyinfo | awk '/dimensions:/ {print $2}')
+    #resolution=$(xdpyinfo | awk '/dimensions:/ {print $2}')
+    resolution=$(echo "$1" | awk '/\s*[0-9]+x[0-9]+/ {print $1}')
 
     if [ -z "$resolution" ]; then
         echo "Error: Unable to retrieve screen resolution. Using default resolution 800x600."
@@ -221,6 +223,17 @@ get_screen_resolution() {
     fi
 }
 
+get_frame_rate() {
+    #frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
+    frame_rate=$(echo "$1" | awk '/\s*[0-9]+\.[0-9]+\*/ {gsub(/[^0-9.]/, "", $1); print $1}')
+
+    if [ -z "$frame_rate" ]; then
+        echo "Error: Unable to retrieve frame rate. Using default frame rate 30."
+        echo "30"
+    else
+        echo "$frame_rate"
+    fi
+}
 
 stop_stream() {
     pkill x11vnc
@@ -236,8 +249,8 @@ check_dependencies() {
         error_install "Avahi"
     elif ! command -v x11vnc &> /dev/null; then
         error_install "x11vnc"
-    elif ! command -v xdpyinfo &> /dev/null; then
-        error_install "xdpyinfo"
+    #elif ! command -v xdpyinfo &> /dev/null; then
+    #    error_install "xdpyinfo"
     elif ! command -v ffmpeg &> /dev/null; then
         error_install "FFmpeg"
     elif ! command -v nginx &> /dev/null; then
