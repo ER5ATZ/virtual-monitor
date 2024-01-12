@@ -70,7 +70,6 @@ update_html() {
 
     html_msg=$(<"$1/html.template")
     html_msg=${html_msg//\$my_hostname_placeholder/$2}
-    # html_msg=${html_msg//my_hostname_placeholder/$2}
     sudo rm -f /var/www/html/index.html
     echo "$html_msg" | sudo tee /var/www/html/index.html > /dev/null
 
@@ -114,6 +113,8 @@ start_stream() {
         current_hostname=${current_hostname%"."*}
     fi
 
+    base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
     echo "Starting x11vnc..."
     x11vnc -clip 1920x1080+0+0 -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
     x11vnc_pid=$!
@@ -127,8 +128,10 @@ start_stream() {
         exit 1
     fi
 
+    sleep 5
+
     echo "Starting FFmpeg..."
-    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > /tmp/ffmpeg.log 2>&1 &
+    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$base_dir/tmp/ffmpeg.log" 2>&1 &
     ffmpeg_pid=$!
     trap 'kill $x11vnc_pid; kill $ffmpeg_pid' EXIT
 
