@@ -19,6 +19,7 @@ install_dependencies() {
 
     install_package avahi-daemon $package_manager
     install_package x11vnc $package_manager
+    install_package xdpyinfo $package_manager
     install_package pulseaudio $package_manager
     install_package ffmpeg $package_manager
     install_package nginx $package_manager
@@ -114,9 +115,10 @@ start_stream() {
     fi
 
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    screen_resolution=$(get_screen_resolution)
 
     echo "Starting x11vnc..."
-    x11vnc -clip 1920x1080+0+0 -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
+    x11vnc -clip "$screen_resolution" -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
     x11vnc_pid=$!
     trap 'kill $x11vnc_pid' EXIT
 
@@ -131,7 +133,8 @@ start_stream() {
     sleep 5
 
     echo "Starting FFmpeg..."
-    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$base_dir/tmp/ffmpeg.log" 2>&1 &
+    frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
+    ffmpeg -f x11grab -s "$screen_resolution" -framerate "$frame_rate" -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$base_dir/tmp/ffmpeg.log" 2>&1 &
     ffmpeg_pid=$!
     trap 'kill $x11vnc_pid; kill $ffmpeg_pid' EXIT
 
@@ -154,6 +157,11 @@ start_stream() {
     fi
 }
 
+get_screen_resolution() {
+    xdpyinfo | awk '/dimensions:/ {print $2}'
+}
+
+
 stop_stream() {
     pkill x11vnc
     pkill ffmpeg
@@ -166,6 +174,8 @@ check_dependencies() {
         error_install "Avahi"
     elif ! command -v x11vnc &> /dev/null; then
         error_install "x11vnc"
+    elif ! command -v xdpyinfo &> /dev/null; then
+        error_install "xdpyinfo"
     elif ! command -v ffmpeg &> /dev/null; then
         error_install "FFmpeg"
     elif ! command -v nginx &> /dev/null; then
