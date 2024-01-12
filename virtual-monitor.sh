@@ -1,9 +1,6 @@
 #!/bin/bash
 
-#script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-#script_name="$(basename "${BASH_SOURCE[0]}")"
-#alias virtual-monitor=". '$script_dir/$script_name'"
-
+SUCCESS_MSG="All necessary packages are installed, hostname was set to "
 my_hostname='virtualmonitor'
 
 install_dependencies() {
@@ -58,64 +55,157 @@ set_hostname() {
         my_hostname="$current_hostname"
     fi
 
-    cat <<EOF | sudo tee /var/www/html/index.html
+    HTML_MSG="
     <!DOCTYPE html>
-    <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>$my_hostname</title>
-      </head>
-      <body>
-          <video width="100%" height="100%" controls>
-              <source src="http://$my_hostname:8080/hls/stream.m3u8" type="application/x-mpegURL">
-              Your browser does not support the video tag.
-          </video>
-      </body>
+    <html lang=\"en\">
+    <head>
+        <meta charset=\"UTF-8\">
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+        <title>$my_hostname stream</title>
+    </head>
+    <body>
+        <div id=\"status\">Checking stream status...</div>
+        <video width=\"100%\" height=\"100%\" controls id=\"videoPlayer\">
+            <source src=\"http://$my_hostname:8080/hls/stream.m3u8\" type=\"application/x-mpegURL\">
+            Your browser does not support the video tag.
+        </video>
+
+        <script>
+            var video = document.getElementById('videoPlayer');
+            var statusDiv = document.getElementById('status');
+
+            function checkStreamStatus() {
+                var xhr = new XMLHttpRequest();
+                xhr.open('HEAD', 'http://$my_hostname:8080/hls/stream.m3u8', true);
+
+                xhr.onload = function() {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        // Stream is online
+                        statusDiv.innerText = 'Stream is online';
+                        video.style.display = 'block';
+                    } else {
+                        // Stream is offline
+                        statusDiv.innerText = 'Stream is offline';
+                        video.style.display = 'none';
+                    }
+                };
+
+                xhr.onerror = function() {
+                    // Stream is offline
+                    statusDiv.innerText = 'Stream is offline';
+                    video.style.display = 'none';
+                };
+
+                xhr.send();
+            }
+
+            setInterval(checkStreamStatus, 5000);
+            checkStreamStatus();
+        </script>
+    </body>
     </html>
+    "
+    echo "$HTML_MSG" > tmp.file
+    sudo rm /var/www/html/index.html
+    cat <<EOF | sudo tee /var/www/html/index.html
+    $HTML_MSG
 EOF
+
+    if diff -q tmp.file /var/www/html/index.html >/dev/null; then
+        echo "Wrote index page to /var/www/html/index.html"
+    else
+        echo "Could not write to /var/www/html/index.html"
+        exit 1
+    fi
+    rm tmp.file
 
     sudo rm /etc/nginx/sites-available/default
     sudo rm /etc/nginx/sites-enabled/default
 
-    cat <<EOF | sudo tee /etc/nginx/sites-available/$my_hostname
-    server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
+  NGINX_MSG="
+  server {
+      listen 80 default_server;
+      listen [::]:80 default_server;
 
-        root /var/www/html;
-        index index.html;
+      root /var/www/html;
+      index index.html;
 
-        server_name _;
+      server_name _;
 
-        location / {
-            try_files \$uri \$uri/ =404;
-        }
+      location / {
+          try_files \$uri \$uri/ =404;
+      }
 
-        location /hls {
-            types {
-                application/vnd.apple.mpegurl m3u8;
-                video/mp2t ts;
-            }
-            alias /tmp/hls;
-            add_header Cache-Control no-cache;
-        }
-    }
+      location /hls {
+          types {
+              application/vnd.apple.mpegurl m3u8;
+              video/mp2t ts;
+          }
+          alias /tmp/hls;
+          add_header Cache-Control no-cache;
+      }
+  }
+  "
+
+  echo "$NGINX_MSG" > tmp.file
+  sudo rm /etc/nginx/sites-available/$my_hostname
+  cat <<EOF | sudo tee /etc/nginx/sites-available/$my_hostname
+  $NGINX_MSG
 EOF
+
+    if diff -q tmp.file /etc/nginx/sites-available/$my_hostname >/dev/null; then
+        echo "Wrote nginx config to /etc/nginx/sites-available/$my_hostname"
+    else
+        echo "Could not write to /etc/nginx/sites-available/$my_hostname"
+        exit 1
+    fi
+    rm tmp.file
 
     sudo ln -s /etc/nginx/sites-available/$my_hostname /etc/nginx/sites-enabled/
     if command -v nginx &> /dev/null; then
         sudo systemctl restart nginx
     fi
+
+    echo "Installation finished. Your hostname is $my_hostname"
 }
 
 start_stream() {
-    check_dependencies
+    current_hostname=$my_hostname
+    dependencies_check=$(check_dependencies)
+    if [[ $dependencies_check == $SUCCESS_MSG* ]]; then
+        current_hostname=${dependencies_check##*$SUCCESS_MSG }
+        current_hostname=${current_hostname%"."*}
+    fi
 
+    echo "Starting x11vnc..."
     x11vnc -clip 1920x1080+0+0 -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
-    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 &
+    x11vnc_status=$?
+    x11vnc_pid=$!
+    trap 'kill $x11vnc_pid' EXIT
 
-    echo "Streaming is now available at http://$my_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
+    if [ $x11vnc_status -eq 0 ]; then
+        echo "x11vnc started successfully with PID $x11vnc_pid. Waiting for FFmpeg to start..."
+    else
+        echo "Failed to start x11vnc. Exiting."
+        exit 1
+    fi
+
+    echo "Starting FFmpeg..."
+    ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > /tmp/ffmpeg.log 2>&1 &
+    ffmpeg_status=$?
+    ffmpeg_pid=$!
+    trap 'kill $x11vnc_pid; kill $ffmpeg_pid' EXIT
+
+    if [ $ffmpeg_status -eq 0 ]; then
+        echo "FFmpeg started successfully with PID $ffmpeg_pid."
+    else
+        echo "Failed to start FFmpeg. Exiting."
+        kill $x11vnc_pid
+        kill $ffmpeg_pid
+        exit 1
+    fi
+
+    echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
 }
 
 stop_stream() {
@@ -147,12 +237,14 @@ check_dependencies() {
 
     if [ "$current_hostname" == "" ] || [ "$current_hostname" == "localhost" ]; then
         echo "Hostname is not set. Please run 'sudo virtual-monitor hostname' first."
+    else
+        echo "$SUCCESS_MSG$current_hostname."
     fi
 }
 
 check_sudo() {
     if [[ $EUID -ne 0 ]]; then
-        echo "This command must be run with sudo. Please use 'sudo virtual-monitor <$1>' instead."
+        echo "This command must be run with sudo. Please use 'sudo $0 $1' instead."
         exit 1
     fi
 }
@@ -211,9 +303,11 @@ case "$1" in
         check_dependencies
         ;;
     start)
+        check_sudo "start"
         start_stream
         ;;
     stop)
+        check_sudo "stop"
         stop_stream
         ;;
     help)
