@@ -156,7 +156,7 @@ start_stream() {
 
     if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
         sleep 15
-        echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
+        #echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
     else
         echo "Failed to start the stream. Check $base_dir/tmp/ffmpeg.log for details."
         exit 1
