@@ -217,7 +217,7 @@ get_screen_resolution() {
     resolution=$(xrandr | awk -F '[ +]' '/primary/ {print $4}')
 
     if [ -z "$resolution" ]; then
-        echo "Error: Unable to retrieve screen resolution. Using default resolution 800x600."
+        #echo "Error: Unable to retrieve screen resolution. Using default resolution 800x600."
         echo "800x600"
     else
         echo "$resolution"
@@ -230,7 +230,7 @@ get_frame_rate() {
     frame_rate=$(xrandr | awk -F '[ +]' '/primary/ {print $5}')
 
     if [ -z "$frame_rate" ] || [ "$frame_rate" -lt 30 ]; then
-        echo "Error: Unable to retrieve frame rate. Using default frame rate 30."
+        #echo "Error: Unable to retrieve frame rate. Using default frame rate 30."
         echo "30"
     else
         echo "$frame_rate"
