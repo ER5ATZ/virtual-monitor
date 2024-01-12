@@ -40,8 +40,10 @@ set_hostname() {
         error_host
     fi
 
+    echo "Current hostname is set as $current_hostname"
+
     if [ "$current_hostname" == "localhost" ]; then
-        echo "Setting hostname to $my_hostname"
+        echo "Changing hostname to $my_hostname"
         if [ "$hostname_controller" == "hostnamectl" ]; then
           sudo hostnamectl set-hostname "$my_hostname"
           sudo systemctl restart avahi-daemon
@@ -112,13 +114,13 @@ set_hostname() {
 EOF
 
     if diff -q tmp.file /var/www/html/index.html >/dev/null; then
-        echo "Wrote index page to /var/www/html/index.html"
-    else
         echo "Could not write to /var/www/html/index.html"
         exit 1
+    else
+        echo "Wrote index page to /var/www/html/index.html"
     fi
-    rm tmp.file
 
+    sudo rm tmp.file
     sudo rm /etc/nginx/sites-available/default
     sudo rm /etc/nginx/sites-enabled/default
 
@@ -154,14 +156,15 @@ EOF
 EOF
 
     if diff -q tmp.file /etc/nginx/sites-available/$my_hostname >/dev/null; then
-        echo "Wrote nginx config to /etc/nginx/sites-available/$my_hostname"
-    else
         echo "Could not write to /etc/nginx/sites-available/$my_hostname"
         exit 1
+    else
+        echo "Wrote nginx config to /etc/nginx/sites-available/$my_hostname"
     fi
-    rm tmp.file
 
+    sudo rm tmp.file
     sudo ln -s /etc/nginx/sites-available/$my_hostname /etc/nginx/sites-enabled/
+
     if command -v nginx &> /dev/null; then
         sudo systemctl restart nginx
     fi
