@@ -1,7 +1,8 @@
 #!/bin/bash
 
 SUCCESS_MSG="All necessary packages are installed, hostname was set to "
-my_hostname='virtualmonitor'
+AVAILABLE_METHODS="{install|host|check|start|stop|help}"
+my_hostname='virtual.monitor'
 
 install_dependencies() {
     echo "Installing dependencies..."
@@ -57,137 +58,68 @@ set_hostname() {
         my_hostname="$current_hostname"
     fi
 
-    sudo rm -f /tmp/virtualmonitor.file
+    template_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/templates"
+    update_html "$template_dir" $my_hostname
+    update_nginx "$template_dir" $my_hostname
 
-    HTML_MSG="
-    <!DOCTYPE html>
-    <html lang=\"en\">
-    <head>
-        <meta charset=\"UTF-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-        <title>$my_hostname stream</title>
-    </head>
-    <body>
-        <div id=\"status\">Checking stream status...</div>
-        <video width=\"100%\" height=\"100%\" controls id=\"videoPlayer\">
-            <source src=\"http://$my_hostname:8080/hls/stream.m3u8\" type=\"application/x-mpegURL\">
-            Your browser does not support the video tag.
-        </video>
+    echo "Installation finished. Your hostname is $my_hostname"
+}
 
-        <script>
-            var video = document.getElementById('videoPlayer');
-            var statusDiv = document.getElementById('status');
+update_html() {
+    echo "Updating HTML..."
 
-            function checkStreamStatus() {
-                var xhr = new XMLHttpRequest();
-                xhr.open('HEAD', 'http://$my_hostname:8080/hls/stream.m3u8', true);
+    html_msg=$(<"$1/html.template")
+    html_msg=${html_msg//\$\{my_hostname_placeholder\}/$2}
 
-                xhr.onload = function() {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        // Stream is online
-                        statusDiv.innerText = 'Stream is online';
-                        video.style.display = 'block';
-                    } else {
-                        // Stream is offline
-                        statusDiv.innerText = 'Stream is offline';
-                        video.style.display = 'none';
-                    }
-                };
-
-                xhr.onerror = function() {
-                    // Stream is offline
-                    statusDiv.innerText = 'Stream is offline';
-                    video.style.display = 'none';
-                };
-
-                xhr.send();
-            }
-
-            setInterval(checkStreamStatus, 5000);
-            checkStreamStatus();
-        </script>
-    </body>
-    </html>
-    "
-    echo "$HTML_MSG" > /tmp/virtualmonitor.file
     sudo rm -f /var/www/html/index.html
-    cat <<EOF | sudo tee /var/www/html/index.html
-    $HTML_MSG
-EOF
+    echo "$html_msg" | sudo tee /var/www/html/index.html > /dev/null
 
-    if diff -q /tmp/virtualmonitor.file /var/www/html/index.html >/dev/null; then
+    if diff -q "$html_msg" /var/www/html/index.html >/dev/null; then
         echo "Could not write to /var/www/html/index.html"
         exit 1
     else
         echo "Wrote index page to /var/www/html/index.html"
     fi
+}
 
-    sudo rm /tmp/virtualmonitor.file
+update_nginx() {
+    echo "Updating nginx..."
+    nginx_msg=$(<"$1/conf.template")
+
+    sudo rm -f "/etc/nginx/sites-available/$2"
     sudo rm /etc/nginx/sites-available/default
     sudo rm /etc/nginx/sites-enabled/default
 
-    NGINX_MSG="
-    server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
+    echo "$nginx_msg" | sudo tee "/etc/nginx/sites-available/$2" > /dev/null
 
-        root /var/www/html;
-        index index.html;
-
-        server_name _;
-
-        location / {
-            try_files \$uri \$uri/ =404;
-        }
-
-        location /hls {
-            types {
-                application/vnd.apple.mpegurl m3u8;
-                video/mp2t ts;
-            }
-            alias /tmp/hls;
-            add_header Cache-Control no-cache;
-        }
-    }
-  "
-
-  echo "$NGINX_MSG" > /tmp/virtualmonitor.file
-  sudo rm -f /etc/nginx/sites-available/$my_hostname
-  cat <<EOF | sudo tee /etc/nginx/sites-available/$my_hostname
-  $NGINX_MSG
-EOF
-
-    if diff -q /tmp/virtualmonitor.file /etc/nginx/sites-available/$my_hostname >/dev/null; then
-        echo "Could not write to /etc/nginx/sites-available/$my_hostname"
+    if diff -q "$nginx_msg" "/etc/nginx/sites-available/$2" >/dev/null; then
+        echo "Could not write to /etc/nginx/sites-available/$2"
         exit 1
     else
-        echo "Wrote nginx config to /etc/nginx/sites-available/$my_hostname"
+        echo "Wrote nginx config to /etc/nginx/sites-available/$2"
     fi
 
-    sudo rm /tmp/virtualmonitor.file
-    sudo ln -s /etc/nginx/sites-available/$my_hostname /etc/nginx/sites-enabled/
+    sudo ln -s "/etc/nginx/sites-available/$2" /etc/nginx/sites-enabled/
 
     if command -v nginx &> /dev/null; then
         sudo systemctl restart nginx
     fi
-
-    echo "Installation finished. Your hostname is $my_hostname"
 }
 
 start_stream() {
     current_hostname=$my_hostname
     dependencies_check=$(check_dependencies)
     if [[ $dependencies_check == $SUCCESS_MSG* ]]; then
-        current_hostname=${dependencies_check##*$SUCCESS_MSG }
+        current_hostname=${dependencies_check#"$SUCCESS_MSG"}
         current_hostname=${current_hostname%"."*}
     fi
 
     echo "Starting x11vnc..."
     x11vnc -clip 1920x1080+0+0 -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
-    x11vnc_status=$?
     x11vnc_pid=$!
     trap 'kill $x11vnc_pid' EXIT
 
+    x11vnc_status=$?
     if [ $x11vnc_status -eq 0 ]; then
         echo "x11vnc started successfully with PID $x11vnc_pid. Waiting for FFmpeg to start..."
     else
@@ -197,20 +129,26 @@ start_stream() {
 
     echo "Starting FFmpeg..."
     ffmpeg -f x11grab -s 1920x1080 -framerate 30 -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > /tmp/ffmpeg.log 2>&1 &
-    ffmpeg_status=$?
     ffmpeg_pid=$!
     trap 'kill $x11vnc_pid; kill $ffmpeg_pid' EXIT
 
+    ffmpeg_status=$?
     if [ $ffmpeg_status -eq 0 ]; then
         echo "FFmpeg started successfully with PID $ffmpeg_pid."
     else
         echo "Failed to start FFmpeg. Exiting."
         kill $x11vnc_pid
-        kill $ffmpeg_pid
         exit 1
     fi
 
-    echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
+    sleep 5
+
+    if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
+        echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
+    else
+        echo "Failed to start the stream. Check /tmp/ffmpeg.log for details."
+        exit 1
+    fi
 }
 
 stop_stream() {
@@ -241,7 +179,7 @@ check_dependencies() {
     fi
 
     if [ "$current_hostname" == "" ] || [ "$current_hostname" == "localhost" ]; then
-        echo "Hostname is not set. Please run 'sudo virtual-monitor hostname' first."
+        echo "Hostname is not set. Please run 'sudo $0 host (<name>)' first."
     else
         echo "$SUCCESS_MSG$current_hostname."
     fi
@@ -269,13 +207,13 @@ install_package() {
     }
 
 help() {
-    echo "Usage: $0 {install|host|check|start|stop|help}"
-    echo "  install        Install dependencies and set up the virtual monitor"
-    echo "  host (<name>)  Set the hostname, default is virtualmonitor"
-    echo "  check          Check if all dependencies are set up"
-    echo "  start          Start the virtual monitor stream"
-    echo "  stop           Stop the virtual monitor stream"
-    echo "  help           Display this help message"
+    echo "Usage: $0 $AVAILABLE_METHODS"
+    echo "  install        Install dependencies and set up the virtual monitor."
+    echo "  host (<name>)  Set the hostname, default is your machine's name or virtual.monitor."
+    echo "  check          Check if all dependencies are set up."
+    echo "  start          Start the virtual monitor stream."
+    echo "  stop           Stop the virtual monitor stream."
+    echo "  help           Display this help message."
 }
 
 error_install() {
@@ -319,7 +257,7 @@ case "$1" in
         help
         ;;
     *)
-        echo "Usage: $0 {install|host|check|start|stop|help}"
+        echo "Usage: $0 $AVAILABLE_METHODS"
         exit 1
         ;;
 esac
