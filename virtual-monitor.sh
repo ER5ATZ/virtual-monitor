@@ -109,9 +109,9 @@ update_nginx() {
 start_stream() {
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     current_hostname=$my_hostname
-    xrandr_output=$(xrandr --verbose)
-    screen_resolution=$(get_screen_resolution "$xrandr_output")
-    frame_rate=$(get_frame_rate "$xrandr_output")
+    #xrandr_output=$(xrandr --verbose)
+    screen_resolution=$(get_screen_resolution)
+    frame_rate=$(get_frame_rate)
     monitor=0
 
     while [[ "$#" -gt 0 ]]; do
@@ -213,7 +213,8 @@ start_ffmpeg() {
 
 get_screen_resolution() {
     #resolution=$(xdpyinfo | awk '/dimensions:/ {print $2}')
-    resolution=$(echo "$1" | awk '/\s*[0-9]+x[0-9]+/ {print $1}')
+    #resolution=$(echo "$1" | awk '/\s*[0-9]+x[0-9]+/ {print $1}')
+    resolution=$(xrandr | awk -F '[ +]' '/primary/ {print $4}')
 
     if [ -z "$resolution" ]; then
         echo "Error: Unable to retrieve screen resolution. Using default resolution 800x600."
@@ -225,9 +226,10 @@ get_screen_resolution() {
 
 get_frame_rate() {
     #frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
-    frame_rate=$(echo "$1" | awk '/\s*[0-9]+\.[0-9]+\*/ {gsub(/[^0-9.]/, "", $1); print $1}')
+    #frame_rate=$(echo "$1" | awk '/\s*[0-9]+\.[0-9]+\*/ {gsub(/[^0-9.]/, "", $1); print $1}')
+    frame_rate=$(xrandr | awk -F '[ +]' '/primary/ {print $5}')
 
-    if [ -z "$frame_rate" ]; then
+    if [ -z "$frame_rate" ] || [ "$frame_rate" -lt 30 ]; then
         echo "Error: Unable to retrieve frame rate. Using default frame rate 30."
         echo "30"
     else
