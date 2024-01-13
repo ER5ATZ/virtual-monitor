@@ -1,6 +1,6 @@
 # Virtual Monitor Streaming
 
-virtual-monitor.sh is a bash script that sets up a virtual monitor stream using x11vnc, ffmpeg, and Nginx.
+virtual-monitor.sh is a bash script that sets up a virtual monitor stream on linux using x11vnc, ffmpeg, and Nginx.
 
 ## Table of Contents
 
@@ -17,7 +17,6 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream using 
     ```bash
     git clone https://github.com/ER5ATZ/virtual-monitor.git
     cd virtual-monitor
-    git update-index --skip-worktree tmp/ffmpeg.log 
 
     ```
 
@@ -44,13 +43,13 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream using 
 - Start the virtual monitor stream:
 
     ```bash
-    ./virtual-monitor.sh start
+    sudo ./virtual-monitor.sh start [(options)]
     ```
 
 - Stop the virtual monitor stream:
 
     ```bash
-    ./virtual-monitor.sh stop
+    sudo ./virtual-monitor.sh stop
     ```
 
 - Check if all dependencies are set up:
@@ -68,9 +67,13 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream using 
 ## Commands
 
 - **install**: Install dependencies and set up the virtual monitor.
-- **host <name>**: Set the hostname. Default is virtualmonitor.
+- **host (<name>)**: Set the hostname. Default is virtualmonitor.
 - **check**: Check if all dependencies are set up.
-- **start**: Start the virtual monitor stream.
+- **start (--<option>)**: Start the virtual monitor stream.
+- ***start (--mirror | -m)***: Start the virtual monitor as mirror (default).
+- ***start (--extend | -e)***: Start the virtual monitor stream as extension.
+- ****start -e (--resolution | -r <widthxheight>)****: Start the extension monitor with specific resolution.
+- ****start -e (--frame-rate | -f <fps/hz>)****: Start the extension monitor with specific frame rate.
 - **stop**: Stop the virtual monitor stream.
 - **help**: Display this help message.
 
