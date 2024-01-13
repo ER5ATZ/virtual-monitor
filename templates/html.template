@@ -3,12 +3,12 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>$my_hostname_placeholder stream</title>
+        <title>my_hostname_placeholder stream</title>
     </head>
     <body>
         <div id="status">Checking stream status...</div>
         <video width="100%" height="100%" controls id="videoPlayer">
-            <source src="http://$my_hostname_placeholder:8080/hls/stream.m3u8" type="application/x-mpegURL">
+            <source src="http://my_hostname_placeholder:8080/video/stream.m3u8" type="application/x-mpegURL">
             Your browser does not support the video tag.
         </video>
 
@@ -18,7 +18,7 @@
 
             function checkStreamStatus() {
                 var xhr = new XMLHttpRequest();
-                xhr.open('HEAD', 'http://$my_hostname_placeholder:8080/hls/stream.m3u8', true);
+                xhr.open('HEAD', 'http://my_hostname_placeholder:8080/video/stream.m3u8', true);
 
                 xhr.onload = function() {
                     if (xhr.status >= 200 && xhr.status < 300) {
@@ -33,7 +33,6 @@
                 };
 
                 xhr.onerror = function() {
-                    // Stream is offline
                     statusDiv.innerText = 'Stream is offline';
                     video.style.display = 'none';
                 };

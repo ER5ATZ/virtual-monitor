@@ -6,6 +6,7 @@ my_hostname='virtual.monitor'
 
 install_dependencies() {
     echo "Installing dependencies..."
+    command -v git > /dev/null 2>&1 && git update-index --skip-worktree ./tmp/ffmpeg.log
     package_manager=""
     if command -v apt &> /dev/null; then
         sudo apt update
@@ -19,7 +20,6 @@ install_dependencies() {
 
     install_package avahi-daemon $package_manager
     install_package x11vnc $package_manager
-    #install_package xdpyinfo $package_manager
     install_package pulseaudio $package_manager
     install_package ffmpeg $package_manager
     install_package nginx $package_manager
@@ -59,47 +59,59 @@ set_hostname() {
         my_hostname="$current_hostname"
     fi
 
-    template_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/templates"
-    update_html "$template_dir" $my_hostname
-    update_nginx "$template_dir" $my_hostname
+    base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    update_site "$base_dir" $my_hostname
+    update_conf "$base_dir" $my_hostname
 
     echo "Installation finished. Your hostname is $my_hostname"
 }
 
-update_html() {
-    echo "Updating HTML..."
+update_site() {
+    echo "Updating Web Resources..."
 
-    html_msg=$(<"$1/html.template")
-    html_msg=${html_msg//\$my_hostname_placeholder/$2}
-    sudo rm -f /var/www/html/index.html
-    echo "$html_msg" | sudo tee /var/www/html/index.html > /dev/null
+    html_msg=$(<"$1/templates/html.template")
+    html_msg=${html_msg//my_hostname_placeholder/$2}
+    html_dir="$1/html"
+    video_dir="$1/video"
+    html_path="$html_dir/index.html"
+    sudo rm -r -f "$html_dir"
+    sudo rm -r -f "$video_dir"
+    mkdir "$html_dir"
+    mkdir "$video_dir"
+    sudo chmod 1777 "$html_dir"
+    sudo chmod 1777 "$video_dir"
+    echo "$html_msg" | sudo tee "$html_path" > /dev/null
 
-    if diff -q "$html_msg" /var/www/html/index.html >/dev/null; then
-        echo "Could not write to /var/www/html/index.html"
+    if diff -q "$html_msg" "$html_path" >/dev/null; then
+        echo "Could not write to $html_path"
         exit 1
     else
-        echo "Wrote index page to /var/www/html/index.html"
+        echo "Wrote index page to $html_path"
     fi
 }
 
-update_nginx() {
-    echo "Updating nginx..."
-    nginx_msg=$(<"$1/conf.template")
+update_conf() {
+    echo "Updating Server Configuration..."
+    nginx_msg=$(<"$1/templates/conf.template")
+    nginx_msg=${nginx_msg//my_basedir_placeholder/$1}
+    nginx_base="/etc/nginx"
+    nginx_available="$nginx_base/sites-available"
+    nginx_enabled="$nginx_base/sites-enabled"
 
-    sudo rm -f "/etc/nginx/sites-available/$2"
-    sudo rm /etc/nginx/sites-available/default
-    sudo rm /etc/nginx/sites-enabled/default
+    sudo rm -f "$nginx_available/$2"
+    sudo rm "$nginx_available/default"
+    sudo rm "$nginx_enabled/default"
 
-    echo "$nginx_msg" | sudo tee "/etc/nginx/sites-available/$2" > /dev/null
+    echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null
 
-    if diff -q "$nginx_msg" "/etc/nginx/sites-available/$2" >/dev/null; then
-        echo "Could not write to /etc/nginx/sites-available/$2"
+    if diff -q "$nginx_msg" "$nginx_available/$2" >/dev/null; then
+        echo "Could not write to $nginx_available/$2"
         exit 1
     else
-        echo "Wrote nginx config to /etc/nginx/sites-available/$2"
+        echo "Wrote nginx config to $nginx_available/$2"
     fi
 
-    sudo ln -s "/etc/nginx/sites-available/$2" /etc/nginx/sites-enabled/
+    sudo ln -s "$nginx_available/$2" "$nginx_enabled/"
 
     if command -v nginx &> /dev/null; then
         sudo systemctl restart nginx
@@ -109,9 +121,9 @@ update_nginx() {
 start_stream() {
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     current_hostname=$my_hostname
-    #xrandr_output=$(xrandr --verbose)
-    screen_resolution=$(get_screen_resolution)
-    frame_rate=$(get_frame_rate)
+    primary=$(xrandr | awk '/ connected primary/,/ connected| disconnected/' | grep -v ' connected \(primary\| disconnected\)' | grep '[0-9]\*')
+    screen_resolution=$(echo "$primary" | awk '{print $1}')
+    frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
     monitor=0
 
     while [[ "$#" -gt 0 ]]; do
@@ -152,11 +164,11 @@ start_stream() {
     start_x11vnc "$monitor" "$screen_resolution"
 
     echo "Starting FFmpeg..."
-    start_ffmpeg "$monitor" "$screen_resolution" "$frame_rate" "$base_dir"
+    start_ffmpeg "$screen_resolution" "$frame_rate" "$base_dir"
 
     if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
-        sleep 1
-        #echo "Streaming is now available at http://$current_hostname/ or http://<ip-address>/ (or any individual name you might have set)."
+        sleep 5
+        echo "Streaming is now available at http://$current_hostname:8080/ or http://<ip-address>:8080/ (or any individual name you might have set)."
     else
         echo "Failed to start the stream. Check $base_dir/tmp/ffmpeg.log for details."
         exit 1
@@ -165,7 +177,7 @@ start_stream() {
 
 start_x11vnc() {
     if [ "$1" == 1 ]; then
-        x11vnc -clip "$2" -nopw -xkb -noxrecord -noxfixes -noxdamage -display :0 -forever &
+        x11vnc -clip "$2" -display :0 -nopw -xkb -noxrecord -noxfixes -noxdamage -forever &
     else
         x11vnc -display :0 -nopw -xkb -noxrecord -noxfixes -noxdamage -forever &
     fi
@@ -185,65 +197,57 @@ start_x11vnc() {
 }
 
 start_ffmpeg() {
-    if [ "$1" = 2 ]; then
-        echo "Creating extension: ffmpeg -f x11grab -video_size $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
-        -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0
-        /tmp/hls/stream.m3u8 > $4/tmp/ffmpeg.log 2>&1 &"
-        ffmpeg -loglevel fatal -f x11grab -video_size "$2" -framerate "$3" -probesize 200M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
-    else
-        echo "Creating mirror: ffmpeg -f x11grab -s $2 -framerate $3 -i :0.0+0,0 -f pulse -i default
-        -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0
-        /tmp/hls/stream.m3u8 > $4/tmp/ffmpeg.log 2>&1 &"
-        ffmpeg -loglevel fatal -f x11grab -s "$2" -framerate "$3" -probesize 200M -i :0.0+0,0 -f pulse -i default -c:v libx264 -c:a aac -preset ultrafast -tune zerolatency -hls_time 2 -hls_wrap 5 -start_number 0 /tmp/hls/stream.m3u8 > "$4/tmp/ffmpeg.log" 2>&1 &
-    fi
+    video_source="-f x11grab"
+    video_input="-i :0.0+0,0"
+    video_dimensions="-s $1"
+    frame_rate="-r $2"
+    #probe_size="-probesize 200M"
+    #video_codec="-c:v libx264"
+    #sound_source="-f pulse -ac 2"
+    #sound_input="-i default"
+    sound_source_alsa="-f alsa -ac 2"
+    sound_input_alsa="-i hw:0"
+    #sound_codec="-c:a aac"
+    #encoding_settings="-preset ultrafast -tune zerolatency"
+    #hls_settings="-hls_time 2 -hls_wrap 5 -start_number 0"
+    hls_settings="-f hls -hls_time 5 -hls_list_size 2"
+    stream_target="$3/tmp/video/stream.m3u8"
+    log_level="-loglevel verbose"
+    log_file="$3/tmp/ffmpeg.log"
 
+    #video_cmd="$video_dimensions $frame_rate $video_source $video_input $probe_size $video_codec"
+    video_cmd="$video_dimensions $frame_rate $video_source $video_input"
+    #sound_cmd="$sound_source $sound_input $sound_codec $encoding_settings"
+    sound_cmd="$sound_source_alsa $sound_input_alsa"
+    #stream_cmd="$hls_settings $stream_target"
+    stream_cmd="$hls_settings $stream_target"
+
+    #ffmpeg_cmd="ffmpeg $log_level $video_cmd $sound_cmd $encoding_settings $stream_cmd > $log_file 2>&1 &"
+    ffmpeg_cmd="ffmpeg $log_level $video_cmd $sound_cmd $stream_cmd > $log_file 2>&1 &"
+
+    sudo bash -c "$ffmpeg_cmd"
     ffmpeg_pid=$!
-    trap 'kill $x11vnc_pid; kill $ffmpeg_pid' EXIT
+    trap 'kill $ffmpeg_pid' EXIT
 
     ffmpeg_status=$?
     if [ $ffmpeg_status -eq 0 ]; then
         echo "FFmpeg started successfully with PID $ffmpeg_pid."
     else
         echo "Failed to start FFmpeg. Exiting."
-        kill $x11vnc_pid
         exit 1
     fi
 
     sleep 5
 }
 
-get_screen_resolution() {
-    #resolution=$(xdpyinfo | awk '/dimensions:/ {print $2}')
-    #resolution=$(echo "$1" | awk '/\s*[0-9]+x[0-9]+/ {print $1}')
-    resolution=$(xrandr | awk -F '[ +]' '/primary/ {print $4}')
-
-    if [ -z "$resolution" ]; then
-        #echo "Error: Unable to retrieve screen resolution. Using default resolution 800x600."
-        echo "800x600"
-    else
-        echo "$resolution"
-    fi
-}
-
-get_frame_rate() {
-    #frame_rate=$(ffprobe -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 -i :0.0+0,0)
-    #frame_rate=$(echo "$1" | awk '/\s*[0-9]+\.[0-9]+\*/ {gsub(/[^0-9.]/, "", $1); print $1}')
-    frame_rate=$(xrandr | awk -F '[ +]' '/primary/ {print $5}')
-
-    if [ -z "$frame_rate" ] || [ "$frame_rate" -lt 30 ]; then
-        #echo "Error: Unable to retrieve frame rate. Using default frame rate 30."
-        echo "30"
-    else
-        echo "$frame_rate"
-    fi
-}
-
 stop_stream() {
+    base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    echo "Stopping stream..."
     pkill x11vnc
     pkill ffmpeg
 
     sleep 5
-
+    sudo rm -r "$base_dir/tmp/video"
     echo "Streaming stopped."
 }
 
@@ -252,8 +256,6 @@ check_dependencies() {
         error_install "Avahi"
     elif ! command -v x11vnc &> /dev/null; then
         error_install "x11vnc"
-    #elif ! command -v xdpyinfo &> /dev/null; then
-    #    error_install "xdpyinfo"
     elif ! command -v ffmpeg &> /dev/null; then
         error_install "FFmpeg"
     elif ! command -v nginx &> /dev/null; then

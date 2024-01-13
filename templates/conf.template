@@ -3,7 +3,7 @@ server {
     listen 8080 default_server;
     listen [::]:8080 default_server;
 
-    root /var/www/html;
+    root my_basedir_placeholder/tmp/html;
     index index.html;
 
     server_name _;
@@ -12,12 +12,12 @@ server {
         try_files $uri $uri/ =404;
     }
 
-    location /hls {
+    location /video {
         types {
             application/vnd.apple.mpegurl m3u8;
             video/mp2t ts;
         }
-        alias /tmp/hls;
+        alias my_basedir_placeholder/tmp/video;
         add_header Cache-Control no-cache;
     }
 }
