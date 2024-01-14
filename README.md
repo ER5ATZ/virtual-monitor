@@ -70,10 +70,12 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream on lin
 - **host (<name>)**: Set the hostname. Default is virtualmonitor.
 - **check**: Check if all dependencies are set up.
 - **start (--<option>)**: Start the virtual monitor stream.
-- ***start (--mirror | -m)***: Start the virtual monitor as mirror (default).
-- ***start (--extend | -e)***: Start the virtual monitor stream as extension.
-- ****start -e (--resolution | -r <widthxheight>)****: Start the extension monitor with specific resolution.
-- ****start -e (--frame-rate | -f <fps/hz>)****: Start the extension monitor with specific frame rate.
+- ***start (--logging|-l)***: Start the virtual monitor with logging (off by default).
+- ***start (--sound|-s)***: Start the virtual monitor with sound (off by default).
+- ***start (--mirror|-m)***: Start the virtual monitor as mirror (default).
+- ***start (--extend|-e)***: Start the virtual monitor stream as extension.
+- ****start -e (--resolution|-r <widthxheight>)****: Start the extension monitor with specific resolution.
+- ****start -e (--frame-rate|-f <fps/hz>)****: Start the extension monitor with specific frame rate.
 - **stop**: Stop the virtual monitor stream.
 - **help**: Display this help message.
 

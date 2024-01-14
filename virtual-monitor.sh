@@ -80,7 +80,7 @@ update_site() {
     mkdir "$video_dir"
     sudo chmod 1777 "$html_dir"
     sudo chmod 1777 "$video_dir"
-    echo "$html_msg" | sudo tee "$html_path" > /dev/null
+    echo "$html_msg" | sudo tee "$html_path" > /dev/null 2>&1
 
     if diff -q "$html_msg" "$html_path" >/dev/null; then
         echo "Could not write to $html_path"
@@ -102,7 +102,7 @@ update_conf() {
     sudo rm "$nginx_available/default"
     sudo rm "$nginx_enabled/default"
 
-    echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null
+    echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
 
     if diff -q "$nginx_msg" "$nginx_available/$2" >/dev/null; then
         echo "Could not write to $nginx_available/$2"
@@ -125,11 +125,22 @@ start_stream() {
     screen_resolution=$(echo "$primary" | awk '{print $1}')
     frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
     monitor=0
+    sound=0
+    logging=1
 
     while [[ "$#" -gt 0 ]]; do
         case $1 in
+            -s|--sound)
+                sound=1
+                shift
+                ;;
+            -l|--logging)
+                logging=1
+                shift
+                ;;
             -m|--mirror)
                 monitor=1
+                shift
                 ;;
             -e|--extend)
                 monitor=2
@@ -164,13 +175,16 @@ start_stream() {
     start_x11vnc "$monitor" "$screen_resolution"
 
     echo "Starting FFmpeg..."
-    start_ffmpeg "$screen_resolution" "$frame_rate" "$base_dir"
+    start_ffmpeg "$screen_resolution" "$frame_rate" "$base_dir" "$sound" "$logging"
 
+    sleep 5
     if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
-        sleep 5
         echo "Streaming is now available at http://$current_hostname:8080/ or http://<ip-address>:8080/ (or any individual name you might have set)."
-    else
+    elif [ "$logging" == 1 ]; then
         echo "Failed to start the stream. Check $base_dir/tmp/ffmpeg.log for details."
+        exit 1
+    else
+        echo "Failed to start the stream."
         exit 1
     fi
 }
@@ -215,17 +229,27 @@ start_ffmpeg() {
     log_level="-loglevel verbose"
     log_file="$3/tmp/ffmpeg.log"
 
+    ffmpeg_cmd="ffmpeg"
+    ffmpeg_cmd="$ffmpeg_cmd $log_level"
     #video_cmd="$video_dimensions $frame_rate $video_source $video_input $probe_size $video_codec"
-    video_cmd="$video_dimensions $frame_rate $video_source $video_input"
+    #video_cmd="$video_dimensions $frame_rate $video_source $video_input"
+    ffmpeg_cmd="$ffmpeg_cmd $video_dimensions $frame_rate $video_source $video_input"
     #sound_cmd="$sound_source $sound_input $sound_codec $encoding_settings"
-    sound_cmd="$sound_source_alsa $sound_input_alsa"
+    #sound_cmd="$sound_source_alsa $sound_input_alsa"
+    if [ "$4" == 1 ]; then
+        ffmpeg_cmd="$ffmpeg_cmd $sound_source_alsa $sound_input_alsa"
+    fi
     #stream_cmd="$hls_settings $stream_target"
-    stream_cmd="$hls_settings $stream_target"
+    ffmpeg_cmd="$ffmpeg_cmd $hls_settings $stream_target"
 
     #ffmpeg_cmd="ffmpeg $log_level $video_cmd $sound_cmd $encoding_settings $stream_cmd > $log_file 2>&1 &"
-    ffmpeg_cmd="ffmpeg $log_level $video_cmd $sound_cmd $stream_cmd > $log_file 2>&1 &"
+    if  [ "$5" == 1 ]; then
+        ffmpeg_cmd="$ffmpeg_cmd > $log_file 2>&1 &"
+    else
+        ffmpeg_cmd="$ffmpeg_cmd > /dev/null 2>&1 &"
+    fi
 
-    sudo bash -c "$ffmpeg_cmd"
+    sudo bash -c "$ffmpeg_cmd" #> /dev/null 2>&1
     ffmpeg_pid=$!
     trap 'kill $ffmpeg_pid' EXIT
 
@@ -305,6 +329,8 @@ help() {
     echo "  host (<name>)  Set the hostname, default is your machine's name or virtual.monitor."
     echo "  check          Check if all dependencies are set up."
     echo "  start          Start the virtual monitor stream. By default as --mirror, all arguments are optional."
+    echo "  start  (-l | --logging)  Start the virtual monitor stream with logging enabled (by default off)."
+    echo "  start  (-s | --sound)  Start the virtual monitor stream with sound (by default off)."
     echo "  start  (-m | --mirror)  Start the virtual monitor stream as mirror with same resolution and frame rate."
     echo "  start  (-e | --extend)  Start the virtual monitor stream as extension of main display with same resolution and frame rate."
     echo "  start  -e (-r | --resolution)  Start the virtual monitor stream as extension with specific resolution."
@@ -326,7 +352,7 @@ error_package() {
 error_host() {
     echo "Please check your system configuration for the presence of 'hostnamectl' or '/etc/hostname'."
     echo "If neither is available, you may need to set the hostname manually somehow."
-    echo "Meanwhile, you can still access the stream via http://<this machine's ip address in the network>."
+    echo "Meanwhile, you can still access the stream via 'http://<this machine's ip address>:8080'."
 }
 
 case "$1" in
