@@ -1,28 +1,50 @@
 #!/bin/bash
 
-SUCCESS_MSG="All necessary packages are installed, hostname was set to "
 AVAILABLE_METHODS="{install|host|check|start|stop|help}"
 my_hostname='virtual.monitor'
 
 install_dependencies() {
     echo "Installing dependencies..."
+    install_needed=0
+    if ! command -v avahi-daemon &> /dev/null; then
+        install_needed=1
+    elif ! command -v x11vnc &> /dev/null; then
+        install_needed=2
+    elif ! command -v pulseaudio &> /dev/null; then
+        install_needed=3
+    elif ! command -v ffmpeg &> /dev/null; then
+        install_needed=4
+    elif ! command -v nginx &> /dev/null; then
+        install_needed=5
+    fi
+
     command -v git > /dev/null 2>&1 && git update-index --skip-worktree ./tmp/ffmpeg.log
     package_manager=""
     if command -v apt &> /dev/null; then
-        sudo apt update
         package_manager="apt"
     elif command -v apt-get &> /dev/null; then
-        sudo apt-get update
         package_manager="apt-get"
+    elif [ $install_needed -lt 1 ]; then
+        package_manager="none"
     else
         error_package
     fi
 
-    install_package avahi-daemon $package_manager
-    install_package x11vnc $package_manager
-    install_package pulseaudio $package_manager
-    install_package ffmpeg $package_manager
-    install_package nginx $package_manager
+    if [ $package_manager != "none" ]; then
+      sudo bash -c "$package_manager update"
+    fi
+
+    if [ $install_needed -gt 0 ]; then
+      install_package avahi-daemon $package_manager
+    elif [ $install_needed -gt 1 ]; then
+      install_package x11vnc $package_manager
+    elif [ $install_needed -gt 2 ]; then
+      install_package pulseaudio $package_manager
+    elif [ $install_needed -gt 3 ]; then
+      install_package ffmpeg $package_manager
+    elif [ $install_needed -gt 4 ]; then
+      install_package nginx $package_manager
+    fi
 
     set_hostname
 }
@@ -280,6 +302,8 @@ check_dependencies() {
         error_install "Avahi"
     elif ! command -v x11vnc &> /dev/null; then
         error_install "x11vnc"
+    elif ! command -v pulseaudio &> /dev/null; then
+        error_install "pulseaudio"
     elif ! command -v ffmpeg &> /dev/null; then
         error_install "FFmpeg"
     elif ! command -v nginx &> /dev/null; then
@@ -298,7 +322,7 @@ check_dependencies() {
     if [ "$current_hostname" == "" ] || [ "$current_hostname" == "localhost" ]; then
         echo "Hostname is not set. Please run 'sudo $0 host (<name>)' first."
     else
-        echo "$SUCCESS_MSG$current_hostname."
+        echo "All necessary packages are installed, hostname was set to $current_hostname."
     fi
 }
 
