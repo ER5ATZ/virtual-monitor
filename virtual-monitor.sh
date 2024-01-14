@@ -9,19 +9,15 @@ install_dependencies() {
     if ! command -v avahi-daemon &> /dev/null; then
         install_needed=1
     fi
-
     if ! command -v x11vnc &> /dev/null; then
         install_needed=2
     fi
-
     if ! command -v pulseaudio &> /dev/null; then
         install_needed=3
     fi
-
     if ! command -v ffmpeg &> /dev/null; then
         install_needed=4
     fi
-
     if ! command -v nginx &> /dev/null; then
         install_needed=5
     fi
@@ -47,13 +43,17 @@ install_dependencies() {
 
     if [ $install_needed -gt 0 ]; then
       install_package avahi-daemon $package_manager
-    elif [ $install_needed -gt 1 ]; then
+    fi
+    if [ $install_needed -gt 1 ]; then
       install_package x11vnc $package_manager
-    elif [ $install_needed -gt 2 ]; then
+    fi
+    if [ $install_needed -gt 2 ]; then
       install_package pulseaudio $package_manager
-    elif [ $install_needed -gt 3 ]; then
+    fi
+    if [ $install_needed -gt 3 ]; then
       install_package ffmpeg $package_manager
-    elif [ $install_needed -gt 4 ]; then
+    fi
+    if [ $install_needed -gt 4 ]; then
       install_package nginx $package_manager
     fi
 
