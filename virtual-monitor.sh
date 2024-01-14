@@ -8,18 +8,27 @@ install_dependencies() {
     install_needed=0
     if ! command -v avahi-daemon &> /dev/null; then
         install_needed=1
-    elif ! command -v x11vnc &> /dev/null; then
+    fi
+
+    if ! command -v x11vnc &> /dev/null; then
         install_needed=2
-    elif ! command -v pulseaudio &> /dev/null; then
+    fi
+
+    if ! command -v pulseaudio &> /dev/null; then
         install_needed=3
-    elif ! command -v ffmpeg &> /dev/null; then
+    fi
+
+    if ! command -v ffmpeg &> /dev/null; then
         install_needed=4
-    elif ! command -v nginx &> /dev/null; then
+    fi
+
+    if ! command -v nginx &> /dev/null; then
         install_needed=5
     fi
 
     command -v git > /dev/null 2>&1 && git update-index --skip-worktree ./tmp/ffmpeg.log
     package_manager=""
+
     if command -v apt &> /dev/null; then
         package_manager="apt"
     elif command -v apt-get &> /dev/null; then
@@ -31,7 +40,9 @@ install_dependencies() {
     fi
 
     if [ $package_manager != "none" ]; then
+      echo "Updating packages lists..."
       sudo bash -c "$package_manager update"
+      echo "Installing $install_needed packages..."
     fi
 
     if [ $install_needed -gt 0 ]; then
@@ -338,9 +349,9 @@ install_package() {
         if ! command -v "$package" &> /dev/null; then
             echo "$package is not installed. Installing..."
             if [ "$2" == "apt" ]; then
-                sudo apt install -y "$package"
+                sudo apt install -y "$package" > /dev/null
             elif [ "$2" == "apt-get" ]; then
-                sudo apt-get install -y "$package"
+                sudo apt-get install -y "$package" > /dev/null
             else
                 error_package
             fi
