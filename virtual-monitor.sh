@@ -96,7 +96,7 @@ update_site() {
 
     html_msg=$(<"$1/templates/html.template")
     html_msg=${html_msg//my_hostname_placeholder/$2}
-    html_dir="$1/html"
+    html_dir="$1/tmp/html"
     html_path="$html_dir/index.html"
     sudo rm -r -f "$html_dir"
     mkdir "$html_dir"
@@ -144,11 +144,21 @@ update_conf() {
 
 start_stream() {
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    video_dir="$base_dir/video"
+    video_dir="$base_dir/tmp/video"
     sudo rm -r -f "$video_dir"
     mkdir "$video_dir"
     sudo chmod 1777 "$video_dir"
     current_hostname=$my_hostname
+    if command -v hostnamectl &> /dev/null; then
+        hostname_controller="hostnamectl"
+        current_hostname=$(hostnamectl --static)
+    elif [ -f /etc/hostname ]; then
+        hostname_controller="hostname"
+        current_hostname=$(cat /etc/hostname)
+    else
+        current_hostname="localhost"
+        error_host
+    fi
     primary=$(xrandr | awk '/ connected primary/, EOF' | grep -v ' connected \(primary\| disconnected\)' | grep '[0-9]\*')
     screen_resolution=$(echo "$primary" | awk '{print $1}')
     frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
@@ -253,7 +263,7 @@ start_ffmpeg() {
     #encoding_settings="-preset ultrafast -tune zerolatency"
     #hls_settings="-hls_time 2 -hls_wrap 5 -start_number 0"
     hls_settings="-f hls -hls_time 5 -hls_list_size 2"
-    stream_target="$3/video/stream.m3u8"
+    stream_target="$3/tmp/video/stream.m3u8"
     #log_level="-loglevel verbose"
     log_file="$3/tmp/ffmpeg.log"
 
