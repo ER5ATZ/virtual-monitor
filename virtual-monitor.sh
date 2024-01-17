@@ -103,7 +103,9 @@ update_site() {
     sudo chmod 1777 "$html_dir"
     echo "$html_msg" | sudo tee "$html_path" > /dev/null 2>&1
 
-    if diff -q "$html_msg" "$(<"$html_path")" >/dev/null; then
+    diff_result=$(diff -q "$html_msg" "$(<"$html_path")" 2>&1)
+    echo "Difference for html: $diff_result"
+    if [ -z "$diff_result" ]; then
         echo "Wrote index page to $html_path"
     else
         echo "Could not write to $html_path"
@@ -125,7 +127,9 @@ update_conf() {
 
     echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
 
-    if diff -q "$nginx_msg" "$(<"$nginx_available/$2")" >/dev/null; then
+    diff_result=$(diff -q "$nginx_msg" "$(<"$nginx_available/$2")" 2>&1)
+    echo "Difference for nginx: $diff_result"
+    if [ -z "$diff_result" ]; then
         echo "Wrote nginx config to $nginx_available/$2"
     else
         echo "Could not write to $nginx_available/$2"
