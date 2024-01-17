@@ -122,12 +122,12 @@ update_conf() {
     nginx_enabled="$nginx_base/sites-enabled"
 
     sudo rm -f "$nginx_available/$2"
-    sudo rm "$nginx_available/default"
-    sudo rm "$nginx_enabled/default"
+    sudo rm -f "$nginx_available/default"
+    sudo rm -f "$nginx_enabled/default"
 
     echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
 
-    diff_result=$(diff -B <(echo "$nginx_msg") <(cat "$$nginx_available/$2") 2>&1)
+    diff_result=$(diff -B <(echo "$nginx_msg") <(cat "$nginx_available/$2") 2>&1)
     echo "Difference for nginx: $diff_result"
     if [ -z "$diff_result" ]; then
         echo "Wrote nginx config to $nginx_available/$2"
