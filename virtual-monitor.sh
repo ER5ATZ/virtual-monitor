@@ -134,6 +134,7 @@ update_conf() {
         exit 1
     fi
 
+    sudo rm -f "$nginx_enabled/$2"
     sudo ln -s "$nginx_available/$2" "$nginx_enabled/"
 
     if command -v nginx &> /dev/null; then
@@ -252,7 +253,7 @@ start_ffmpeg() {
     #encoding_settings="-preset ultrafast -tune zerolatency"
     #hls_settings="-hls_time 2 -hls_wrap 5 -start_number 0"
     hls_settings="-f hls -hls_time 5 -hls_list_size 2"
-    stream_target="$3/tmp/video/stream.m3u8"
+    stream_target="$3/video/stream.m3u8"
     #log_level="-loglevel verbose"
     log_file="$3/tmp/ffmpeg.log"
 
