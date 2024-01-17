@@ -253,7 +253,7 @@ start_ffmpeg() {
     video_input="-i :0.0+0,0"
     video_dimensions="-s $1"
     frame_rate="-r $2"
-    #probe_size="-probesize 200M"
+    probe_size="-probesize 200M"
     #video_codec="-c:v libx264"
     #sound_source="-f pulse -ac 2"
     #sound_input="-i default"
@@ -271,7 +271,7 @@ start_ffmpeg() {
     #ffmpeg_cmd="$ffmpeg_cmd $log_level"
     #video_cmd="$video_dimensions $frame_rate $video_source $video_input $probe_size $video_codec"
     #video_cmd="$video_dimensions $frame_rate $video_source $video_input"
-    ffmpeg_cmd="$ffmpeg_cmd $video_dimensions $frame_rate $video_source $video_input"
+    ffmpeg_cmd="$ffmpeg_cmd $video_dimensions $frame_rate $video_source $probe_size $video_input"
     #sound_cmd="$sound_source $sound_input $sound_codec $encoding_settings"
     #sound_cmd="$sound_source_alsa $sound_input_alsa"
     if [ "$4" == 1 ]; then
