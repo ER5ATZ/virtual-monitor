@@ -43,17 +43,9 @@ install_dependencies() {
 
     if [ $install_needed -gt 0 ]; then
       install_package avahi-daemon $package_manager
-    fi
-    if [ $install_needed -gt 1 ]; then
       install_package x11vnc $package_manager
-    fi
-    if [ $install_needed -gt 2 ]; then
       install_package pulseaudio $package_manager
-    fi
-    if [ $install_needed -gt 3 ]; then
       install_package ffmpeg $package_manager
-    fi
-    if [ $install_needed -gt 4 ]; then
       install_package nginx $package_manager
     fi
 
@@ -105,21 +97,17 @@ update_site() {
     html_msg=$(<"$1/templates/html.template")
     html_msg=${html_msg//my_hostname_placeholder/$2}
     html_dir="$1/html"
-    video_dir="$1/video"
     html_path="$html_dir/index.html"
     sudo rm -r -f "$html_dir"
-    sudo rm -r -f "$video_dir"
     mkdir "$html_dir"
-    mkdir "$video_dir"
     sudo chmod 1777 "$html_dir"
-    sudo chmod 1777 "$video_dir"
     echo "$html_msg" | sudo tee "$html_path" > /dev/null 2>&1
 
-    if diff -q "$html_msg" "$html_path" >/dev/null; then
+    if diff -q "$html_msg" "$(<"$html_path")" >/dev/null; then
+        echo "Wrote index page to $html_path"
+    else
         echo "Could not write to $html_path"
         exit 1
-    else
-        echo "Wrote index page to $html_path"
     fi
 }
 
@@ -137,11 +125,11 @@ update_conf() {
 
     echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
 
-    if diff -q "$nginx_msg" "$nginx_available/$2" >/dev/null; then
+    if diff -q "$nginx_msg" "$(<"$nginx_available/$2")" >/dev/null; then
+        echo "Wrote nginx config to $nginx_available/$2"
+    else
         echo "Could not write to $nginx_available/$2"
         exit 1
-    else
-        echo "Wrote nginx config to $nginx_available/$2"
     fi
 
     sudo ln -s "$nginx_available/$2" "$nginx_enabled/"
@@ -153,8 +141,12 @@ update_conf() {
 
 start_stream() {
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    video_dir="$base_dir/video"
+    sudo rm -r -f "$video_dir"
+    mkdir "$video_dir"
+    sudo chmod 1777 "$video_dir"
     current_hostname=$my_hostname
-    primary=$(xrandr | awk '/ connected primary/,/ connected| disconnected/' | grep -v ' connected \(primary\| disconnected\)' | grep '[0-9]\*')
+    primary=$(xrandr | awk '/ connected primary/, EOF' | grep -v ' connected \(primary\| disconnected\)' | grep '[0-9]\*')
     screen_resolution=$(echo "$primary" | awk '{print $1}')
     frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
     monitor=0
@@ -259,11 +251,11 @@ start_ffmpeg() {
     #hls_settings="-hls_time 2 -hls_wrap 5 -start_number 0"
     hls_settings="-f hls -hls_time 5 -hls_list_size 2"
     stream_target="$3/tmp/video/stream.m3u8"
-    log_level="-loglevel verbose"
+    #log_level="-loglevel verbose"
     log_file="$3/tmp/ffmpeg.log"
 
     ffmpeg_cmd="ffmpeg"
-    ffmpeg_cmd="$ffmpeg_cmd $log_level"
+    #ffmpeg_cmd="$ffmpeg_cmd $log_level"
     #video_cmd="$video_dimensions $frame_rate $video_source $video_input $probe_size $video_codec"
     #video_cmd="$video_dimensions $frame_rate $video_source $video_input"
     ffmpeg_cmd="$ffmpeg_cmd $video_dimensions $frame_rate $video_source $video_input"
@@ -277,12 +269,13 @@ start_ffmpeg() {
 
     #ffmpeg_cmd="ffmpeg $log_level $video_cmd $sound_cmd $encoding_settings $stream_cmd > $log_file 2>&1 &"
     if  [ "$5" == 1 ]; then
+        echo "Executing $ffmpeg_cmd."
         ffmpeg_cmd="$ffmpeg_cmd > $log_file 2>&1 &"
     else
         ffmpeg_cmd="$ffmpeg_cmd > /dev/null 2>&1 &"
     fi
 
-    sudo bash -c "$ffmpeg_cmd" #> /dev/null 2>&1
+    sudo bash -c "$ffmpeg_cmd"
     ffmpeg_pid=$!
     trap 'kill $ffmpeg_pid' EXIT
 
@@ -304,7 +297,7 @@ stop_stream() {
     pkill ffmpeg
 
     sleep 5
-    sudo rm -r "$base_dir/tmp/video"
+    sudo rm -r "$base_dir/video"
     echo "Streaming stopped."
 }
 
