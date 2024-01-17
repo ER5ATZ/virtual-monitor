@@ -35,7 +35,7 @@ install_dependencies() {
         error_package
     fi
 
-    if [ $package_manager != "none" ]; then
+    if [ $package_manager != "none" ] && [ $install_needed -gt 0 ]; then
       echo "Updating packages lists..."
       sudo bash -c "$package_manager update"
       echo "Installing $install_needed packages..."
@@ -104,7 +104,6 @@ update_site() {
     echo "$html_msg" | sudo tee "$html_path" > /dev/null 2>&1
 
     diff_result=$(diff -B <(echo "$html_msg") <(cat "$html_path") 2>&1)
-    echo "Difference for html: $diff_result"
     if [ -z "$diff_result" ]; then
         echo "Wrote index page to $html_path"
     else
@@ -128,7 +127,6 @@ update_conf() {
     echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
 
     diff_result=$(diff -B <(echo "$nginx_msg") <(cat "$nginx_available/$2") 2>&1)
-    echo "Difference for nginx: $diff_result"
     if [ -z "$diff_result" ]; then
         echo "Wrote nginx config to $nginx_available/$2"
     else
