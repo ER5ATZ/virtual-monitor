@@ -310,7 +310,7 @@ stop_stream() {
     pkill ffmpeg
 
     sleep 5
-    sudo rm -r "$base_dir/video"
+    sudo rm -r "$base_dir/tmp/video"
     echo "Streaming stopped."
 }
 

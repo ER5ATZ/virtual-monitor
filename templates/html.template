@@ -23,11 +23,11 @@
                 xhr.onload = function() {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         // Stream is online
-                        statusDiv.innerText = 'Stream is online';
+                        statusDiv.style.display = 'none';
                         video.style.display = 'block';
                     } else {
                         // Stream is offline
-                        statusDiv.innerText = 'Stream is offline';
+                        statusDiv.innerText = 'Stream offline';
                         video.style.display = 'none';
                     }
                 };
