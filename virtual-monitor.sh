@@ -164,7 +164,7 @@ start_stream() {
     frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
     monitor=0
     sound=0
-    logging=1
+    logging=0
 
     while [[ "$#" -gt 0 ]]; do
         case $1 in
@@ -182,20 +182,19 @@ start_stream() {
                 ;;
             -e|--extend)
                 monitor=2
-                monitor=1
                 shift
                 ;;
             -r|--resolution)
-                if [ "$monitor" == 2 ]; then
-                    echo "Mirroring is not supported with custom resolution."
+                if [ "$monitor" != 2 ]; then
+                    echo "Custom resolution is only supported in extend mode (-e)."
                     exit 1
                 fi
                 screen_resolution=$2
                 shift
                 ;;
             -f|--frame-rate)
-                if [ "$monitor" == 2 ]; then
-                    echo "Mirroring is not supported with custom frame rate."
+                if [ "$monitor" != 2 ]; then
+                    echo "Custom frame rate is only supported in extend mode (-e)."
                     exit 1
                 fi
                 frame_rate=$2
@@ -214,6 +213,8 @@ start_stream() {
 
     echo "Starting FFmpeg..."
     start_ffmpeg "$screen_resolution" "$frame_rate" "$base_dir" "$sound" "$logging"
+
+    trap 'pkill -f "x11vnc.*display"; pkill -f "ffmpeg.*stream.m3u8"' EXIT INT TERM
 
     sleep 5
     if pgrep -f "ffmpeg.*stream.m3u8" >/dev/null; then
@@ -235,7 +236,6 @@ start_x11vnc() {
     fi
 
     x11vnc_pid=$!
-    trap 'kill $x11vnc_pid' EXIT
 
     x11vnc_status=$?
     if [ $x11vnc_status -eq 0 ]; then
@@ -254,15 +254,15 @@ start_ffmpeg() {
     video_dimensions="-s $1"
     frame_rate="-r $2"
     probe_size="-probesize 200M"
-    video_codec="-c:v libx264"
+    video_codec="-c:v libx264 -profile:v baseline -level 3.1"
     #sound_source_pulse="-f pulse -ac 2"
     #sound_input_pulse="-i default"
     sound_source_alsa="-f alsa -ac 2"
     sound_input_alsa="-i hw:0"
     sound_codec="-c:a aac -strict experimental"
-    encoding_settings="-preset ultrafast -tune zerolatency"
+    encoding_settings="-preset ultrafast -tune zerolatency -b:v 2500K -maxrate 3000K -bufsize 5000K"
     #hls_settings="-hls_time 2 -hls_wrap 5 -start_number 0"
-    hls_settings="-f hls -hls_time 5 -hls_list_size 2 -hls_flags delete_segments"
+    hls_settings="-f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+append_list"
     stream_target="$3/tmp/video/stream.m3u8"
     #log_level="-loglevel verbose"
     log_file="$3/tmp/ffmpeg.log"
@@ -291,7 +291,6 @@ start_ffmpeg() {
 
     sudo bash -c "$ffmpeg_cmd"
     ffmpeg_pid=$!
-    trap 'kill $ffmpeg_pid' EXIT
 
     ffmpeg_status=$?
     if [ $ffmpeg_status -eq 0 ]; then
@@ -404,7 +403,7 @@ case "$1" in
         ;;
     host)
         check_sudo "host"
-        my_hostname="${2:$my_hostname}"
+        my_hostname="${2:-$my_hostname}"
         set_hostname
         ;;
     check)

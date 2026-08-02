@@ -83,6 +83,12 @@ virtual-monitor.sh is a bash script that sets up a virtual monitor stream on lin
 
 If you find any issues or have suggestions for improvement, feel free to open an issue or create a pull request.
 
+## Known Issues
+
+- **Latency** — HLS adds 4–6 seconds of buffering. Not suitable for real-time interaction (e.g. gaming), but fine for watching content on TV.
+- **DRM content** — streaming services that block screen capture will show a black screen.
+- **Extend mode** — untested after recent fix; requires a virtual display to actually be created by the window manager.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

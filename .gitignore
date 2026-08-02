@@ -1,0 +1,7 @@
+tmp/html/
+tmp/video/
+tmp/ffmpeg.log
+
+# kiro
+/.kiro
+/PROGRESS.md
