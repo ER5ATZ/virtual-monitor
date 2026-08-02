@@ -3,50 +3,75 @@
 AVAILABLE_METHODS="{install|host|check|start|stop|help}"
 my_hostname='virtual.monitor'
 
+# Detect OS
+OS="$(uname -s)"
+case "$OS" in
+    Linux)  PLATFORM="linux" ;;
+    Darwin) PLATFORM="macos" ;;
+    *)      echo "Unsupported OS: $OS"; exit 1 ;;
+esac
+
 install_dependencies() {
     echo "Installing dependencies..."
-    install_needed=0
-    if ! command -v avahi-daemon &> /dev/null; then
-        install_needed=1
-    fi
-    if ! command -v x11vnc &> /dev/null; then
-        install_needed=2
-    fi
-    if ! command -v pulseaudio &> /dev/null; then
-        install_needed=3
-    fi
-    if ! command -v ffmpeg &> /dev/null; then
-        install_needed=4
-    fi
-    if ! command -v nginx &> /dev/null; then
-        install_needed=5
-    fi
 
-    command -v git > /dev/null 2>&1 && git update-index --skip-worktree ./tmp/ffmpeg.log
-    package_manager=""
+    command -v git > /dev/null 2>&1 && git update-index --skip-worktree ./tmp/ffmpeg.log 2>/dev/null
 
-    if command -v apt &> /dev/null; then
-        package_manager="apt"
-    elif command -v apt-get &> /dev/null; then
-        package_manager="apt-get"
-    elif [ $install_needed -lt 1 ]; then
-        package_manager="none"
+    if [ "$PLATFORM" == "macos" ]; then
+        if ! command -v brew &> /dev/null; then
+            echo "Homebrew is required on macOS. Install from https://brew.sh"
+            exit 1
+        fi
+        if ! command -v ffmpeg &> /dev/null; then
+            echo "Installing ffmpeg..."
+            brew install ffmpeg
+        fi
+        if ! command -v nginx &> /dev/null; then
+            echo "Installing nginx..."
+            brew install nginx
+        fi
     else
-        error_package
-    fi
+        install_needed=0
+        if ! command -v avahi-daemon &> /dev/null; then
+            install_needed=1
+        fi
+        if ! command -v x11vnc &> /dev/null; then
+            install_needed=2
+        fi
+        if ! command -v pulseaudio &> /dev/null; then
+            install_needed=3
+        fi
+        if ! command -v ffmpeg &> /dev/null; then
+            install_needed=4
+        fi
+        if ! command -v nginx &> /dev/null; then
+            install_needed=5
+        fi
 
-    if [ $package_manager != "none" ] && [ $install_needed -gt 0 ]; then
-      echo "Updating packages lists..."
-      sudo bash -c "$package_manager update"
-      echo "Installing $install_needed packages..."
-    fi
+        package_manager=""
 
-    if [ $install_needed -gt 0 ]; then
-      install_package avahi-daemon $package_manager
-      install_package x11vnc $package_manager
-      install_package pulseaudio $package_manager
-      install_package ffmpeg $package_manager
-      install_package nginx $package_manager
+        if command -v apt &> /dev/null; then
+            package_manager="apt"
+        elif command -v apt-get &> /dev/null; then
+            package_manager="apt-get"
+        elif [ $install_needed -lt 1 ]; then
+            package_manager="none"
+        else
+            error_package
+        fi
+
+        if [ $package_manager != "none" ] && [ $install_needed -gt 0 ]; then
+          echo "Updating packages lists..."
+          sudo bash -c "$package_manager update"
+          echo "Installing $install_needed packages..."
+        fi
+
+        if [ $install_needed -gt 0 ]; then
+          install_package avahi-daemon $package_manager
+          install_package x11vnc $package_manager
+          install_package pulseaudio $package_manager
+          install_package ffmpeg $package_manager
+          install_package nginx $package_manager
+        fi
     fi
 
     set_hostname
@@ -54,34 +79,45 @@ install_dependencies() {
 
 set_hostname() {
     echo "Setting hostname..."
-    hostname_controller=""
     current_hostname="$my_hostname"
-    if command -v hostnamectl &> /dev/null; then
-        hostname_controller="hostnamectl"
-        current_hostname=$(hostnamectl --static)
-    elif [ -f /etc/hostname ]; then
-        hostname_controller="hostname"
-        current_hostname=$(cat /etc/hostname)
-    else
-        current_hostname="localhost"
-        error_host
-    fi
 
-    echo "Current hostname is set as $current_hostname"
-
-    if [ "$current_hostname" == "localhost" ]; then
-        echo "Changing hostname to $my_hostname"
-        if [ "$hostname_controller" == "hostnamectl" ]; then
-          sudo hostnamectl set-hostname "$my_hostname"
-          sudo systemctl restart avahi-daemon
-        elif [ "$hostname_controller" == "hostname" ]; then
-          sudo hostname "$my_hostname"
-          sudo systemctl restart avahi-daemon
+    if [ "$PLATFORM" == "macos" ]; then
+        current_hostname=$(scutil --get LocalHostName 2>/dev/null || echo "localhost")
+        if [ "$current_hostname" == "localhost" ]; then
+            echo "Changing hostname to $my_hostname"
+            sudo scutil --set LocalHostName "$my_hostname"
         else
-          error_host
+            my_hostname="$current_hostname"
         fi
     else
-        my_hostname="$current_hostname"
+        hostname_controller=""
+        if command -v hostnamectl &> /dev/null; then
+            hostname_controller="hostnamectl"
+            current_hostname=$(hostnamectl --static)
+        elif [ -f /etc/hostname ]; then
+            hostname_controller="hostname"
+            current_hostname=$(cat /etc/hostname)
+        else
+            current_hostname="localhost"
+            error_host
+        fi
+
+        echo "Current hostname is set as $current_hostname"
+
+        if [ "$current_hostname" == "localhost" ]; then
+            echo "Changing hostname to $my_hostname"
+            if [ "$hostname_controller" == "hostnamectl" ]; then
+              sudo hostnamectl set-hostname "$my_hostname"
+              sudo systemctl restart avahi-daemon
+            elif [ "$hostname_controller" == "hostname" ]; then
+              sudo hostname "$my_hostname"
+              sudo systemctl restart avahi-daemon
+            else
+              error_host
+            fi
+        else
+            my_hostname="$current_hostname"
+        fi
     fi
 
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -116,52 +152,91 @@ update_conf() {
     echo "Updating Server Configuration..."
     nginx_msg=$(<"$1/templates/conf.template")
     nginx_msg=${nginx_msg//my_basedir_placeholder/$1}
-    nginx_base="/etc/nginx"
-    nginx_available="$nginx_base/sites-available"
-    nginx_enabled="$nginx_base/sites-enabled"
 
-    sudo rm -f "$nginx_available/$2"
-    sudo rm -f "$nginx_available/default"
-    sudo rm -f "$nginx_enabled/default"
+    if [ "$PLATFORM" == "macos" ]; then
+        # Homebrew nginx config location
+        if [ -d "/opt/homebrew/etc/nginx" ]; then
+            nginx_base="/opt/homebrew/etc/nginx"
+        elif [ -d "/usr/local/etc/nginx" ]; then
+            nginx_base="/usr/local/etc/nginx"
+        else
+            echo "Could not find Homebrew nginx config directory."
+            exit 1
+        fi
+        nginx_conf="$nginx_base/servers/$2.conf"
+        mkdir -p "$nginx_base/servers"
+        echo "$nginx_msg" > "$nginx_conf"
 
-    echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
+        diff_result=$(diff -B <(echo "$nginx_msg") <(cat "$nginx_conf") 2>&1)
+        if [ -z "$diff_result" ]; then
+            echo "Wrote nginx config to $nginx_conf"
+        else
+            echo "Could not write to $nginx_conf"
+            exit 1
+        fi
 
-    diff_result=$(diff -B <(echo "$nginx_msg") <(cat "$nginx_available/$2") 2>&1)
-    if [ -z "$diff_result" ]; then
-        echo "Wrote nginx config to $nginx_available/$2"
+        # Restart nginx via brew services
+        brew services restart nginx 2>/dev/null || nginx -s reload 2>/dev/null
     else
-        echo "Could not write to $nginx_available/$2"
-        exit 1
-    fi
+        nginx_base="/etc/nginx"
+        nginx_available="$nginx_base/sites-available"
+        nginx_enabled="$nginx_base/sites-enabled"
 
-    sudo rm -f "$nginx_enabled/$2"
-    sudo ln -s "$nginx_available/$2" "$nginx_enabled/"
+        sudo rm -f "$nginx_available/$2"
+        sudo rm -f "$nginx_available/default"
+        sudo rm -f "$nginx_enabled/default"
 
-    if command -v nginx &> /dev/null; then
-        sudo systemctl restart nginx
+        echo "$nginx_msg" | sudo tee "$nginx_available/$2" > /dev/null 2>&1
+
+        diff_result=$(diff -B <(echo "$nginx_msg") <(cat "$nginx_available/$2") 2>&1)
+        if [ -z "$diff_result" ]; then
+            echo "Wrote nginx config to $nginx_available/$2"
+        else
+            echo "Could not write to $nginx_available/$2"
+            exit 1
+        fi
+
+        sudo rm -f "$nginx_enabled/$2"
+        sudo ln -s "$nginx_available/$2" "$nginx_enabled/"
+
+        if command -v nginx &> /dev/null; then
+            sudo systemctl restart nginx
+        fi
     fi
 }
 
 start_stream() {
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     video_dir="$base_dir/tmp/video"
-    sudo rm -r -f "$video_dir"
-    mkdir "$video_dir"
-    sudo chmod 1777 "$video_dir"
-    current_hostname=$my_hostname
-    if command -v hostnamectl &> /dev/null; then
-        hostname_controller="hostnamectl"
-        current_hostname=$(hostnamectl --static)
-    elif [ -f /etc/hostname ]; then
-        hostname_controller="hostname"
-        current_hostname=$(cat /etc/hostname)
+    rm -r -f "$video_dir"
+    mkdir -p "$video_dir"
+    chmod 777 "$video_dir"
+
+    # Resolve hostname
+    if [ "$PLATFORM" == "macos" ]; then
+        current_hostname=$(scutil --get LocalHostName 2>/dev/null || echo "localhost")
     else
-        current_hostname="localhost"
-        error_host
+        current_hostname=$my_hostname
+        if command -v hostnamectl &> /dev/null; then
+            current_hostname=$(hostnamectl --static)
+        elif [ -f /etc/hostname ]; then
+            current_hostname=$(cat /etc/hostname)
+        else
+            current_hostname="localhost"
+            error_host
+        fi
     fi
-    primary=$(xrandr | awk '/ connected primary/, EOF' | grep -v ' connected \(primary\| disconnected\)' | grep '[0-9]\*')
-    screen_resolution=$(echo "$primary" | awk '{print $1}')
-    frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
+
+    # Detect screen resolution and frame rate
+    if [ "$PLATFORM" == "macos" ]; then
+        screen_resolution=$(system_profiler SPDisplaysDataType | awk '/Resolution/{print $2"x"$4; exit}')
+        frame_rate="30"
+    else
+        primary=$(xrandr | awk '/ connected primary/, EOF' | grep -v ' connected \(primary\| disconnected\)' | grep '[0-9]\*')
+        screen_resolution=$(echo "$primary" | awk '{print $1}')
+        frame_rate=$(echo "$primary" | awk '{print $2}' | sed 's/\*//')
+    fi
+
     monitor=0
     sound=0
     logging=0
@@ -208,8 +283,11 @@ start_stream() {
         shift
     done
 
-    echo "Starting x11vnc..."
-    start_x11vnc "$monitor" "$screen_resolution"
+    # On Linux, start x11vnc (macOS captures directly via avfoundation)
+    if [ "$PLATFORM" != "macos" ]; then
+        echo "Starting x11vnc..."
+        start_x11vnc "$monitor" "$screen_resolution"
+    fi
 
     echo "Starting FFmpeg..."
     start_ffmpeg "$screen_resolution" "$frame_rate" "$base_dir" "$sound" "$logging"
@@ -249,47 +327,50 @@ start_x11vnc() {
 }
 
 start_ffmpeg() {
-    video_source="-f x11grab"
-    video_input="-i :0.0+0,0"
-    video_dimensions="-s $1"
+    # Platform-specific capture source
+    if [ "$PLATFORM" == "macos" ]; then
+        video_source="-f avfoundation"
+        video_input="-i \"1:none\""
+        video_dimensions=""
+        sound_source="-f avfoundation"
+        sound_input="-i \"none:0\""
+    else
+        video_source="-f x11grab"
+        video_input="-i :0.0+0,0"
+        video_dimensions="-s $1"
+        sound_source="-f alsa -ac 2"
+        sound_input="-i hw:0"
+    fi
+
     frame_rate="-r $2"
     probe_size="-probesize 200M"
     video_codec="-c:v libx264 -profile:v baseline -level 3.1"
-    #sound_source_pulse="-f pulse -ac 2"
-    #sound_input_pulse="-i default"
-    sound_source_alsa="-f alsa -ac 2"
-    sound_input_alsa="-i hw:0"
     sound_codec="-c:a aac -strict experimental"
     encoding_settings="-preset ultrafast -tune zerolatency -b:v 2500K -maxrate 3000K -bufsize 5000K"
-    #hls_settings="-hls_time 2 -hls_wrap 5 -start_number 0"
     hls_settings="-f hls -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+append_list"
     stream_target="$3/tmp/video/stream.m3u8"
-    #log_level="-loglevel verbose"
     log_file="$3/tmp/ffmpeg.log"
 
     ffmpeg_cmd="ffmpeg"
-    #ffmpeg_cmd="$ffmpeg_cmd $log_level"
-    #video_cmd="$video_dimensions $frame_rate $video_source $video_input $probe_size $video_codec"
-    #video_cmd="$video_dimensions $frame_rate $video_source $video_input"
     ffmpeg_cmd="$ffmpeg_cmd $video_dimensions $frame_rate $video_source $probe_size $video_input $video_codec"
-    #sound_cmd="$sound_source $sound_input $sound_codec $encoding_settings"
-    #sound_cmd="$sound_source_alsa $sound_input_alsa"
     if [ "$4" == 1 ]; then
-        ffmpeg_cmd="$ffmpeg_cmd $sound_source_alsa $sound_input_alsa"
+        ffmpeg_cmd="$ffmpeg_cmd $sound_source $sound_input"
     fi
     ffmpeg_cmd="$ffmpeg_cmd $encoding_settings $sound_codec"
-    #stream_cmd="$hls_settings $stream_target"
     ffmpeg_cmd="$ffmpeg_cmd $hls_settings $stream_target"
 
-    #ffmpeg_cmd="ffmpeg $log_level $video_cmd $sound_cmd $encoding_settings $stream_cmd > $log_file 2>&1 &"
-    if  [ "$5" == 1 ]; then
+    if [ "$5" == 1 ]; then
         echo "Executing $ffmpeg_cmd."
         ffmpeg_cmd="$ffmpeg_cmd > $log_file 2>&1 &"
     else
         ffmpeg_cmd="$ffmpeg_cmd > /dev/null 2>&1 &"
     fi
 
-    sudo bash -c "$ffmpeg_cmd"
+    if [ "$PLATFORM" == "macos" ]; then
+        bash -c "$ffmpeg_cmd"
+    else
+        sudo bash -c "$ffmpeg_cmd"
+    fi
     ffmpeg_pid=$!
 
     ffmpeg_status=$?
@@ -315,25 +396,34 @@ stop_stream() {
 }
 
 check_dependencies() {
-    if ! command -v avahi-daemon &> /dev/null; then
-        error_install "Avahi"
-    elif ! command -v x11vnc &> /dev/null; then
-        error_install "x11vnc"
-    elif ! command -v pulseaudio &> /dev/null; then
-        error_install "pulseaudio"
-    elif ! command -v ffmpeg &> /dev/null; then
-        error_install "FFmpeg"
-    elif ! command -v nginx &> /dev/null; then
-        error_install "Nginx"
-    fi
-
-    current_hostname="localhost"
-    if command -v hostnamectl &> /dev/null; then
-        current_hostname=$(hostnamectl --static)
-    elif [ -f /etc/hostname ]; then
-        current_hostname=$(cat /etc/hostname)
+    if [ "$PLATFORM" == "macos" ]; then
+        if ! command -v ffmpeg &> /dev/null; then
+            error_install "FFmpeg"
+        elif ! command -v nginx &> /dev/null; then
+            error_install "Nginx"
+        fi
+        current_hostname=$(scutil --get LocalHostName 2>/dev/null || echo "localhost")
     else
-        error_host
+        if ! command -v avahi-daemon &> /dev/null; then
+            error_install "Avahi"
+        elif ! command -v x11vnc &> /dev/null; then
+            error_install "x11vnc"
+        elif ! command -v pulseaudio &> /dev/null; then
+            error_install "pulseaudio"
+        elif ! command -v ffmpeg &> /dev/null; then
+            error_install "FFmpeg"
+        elif ! command -v nginx &> /dev/null; then
+            error_install "Nginx"
+        fi
+
+        current_hostname="localhost"
+        if command -v hostnamectl &> /dev/null; then
+            current_hostname=$(hostnamectl --static)
+        elif [ -f /etc/hostname ]; then
+            current_hostname=$(cat /etc/hostname)
+        else
+            error_host
+        fi
     fi
 
     if [ "$current_hostname" == "" ] || [ "$current_hostname" == "localhost" ]; then

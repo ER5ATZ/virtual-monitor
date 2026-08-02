@@ -1,6 +1,11 @@
 # Virtual Monitor Streaming
 
-virtual-monitor.sh is a bash script that sets up a virtual monitor stream on linux using x11vnc, ffmpeg, and Nginx.
+virtual-monitor.sh is a bash script that sets up a virtual monitor stream on Linux and macOS using ffmpeg and Nginx. On Linux it captures via x11vnc; on macOS it captures directly via AVFoundation.
+
+## Supported Platforms
+
+- **Linux** — requires x11vnc, ffmpeg, Nginx, avahi-daemon, pulseaudio (installed via apt)
+- **macOS** — requires ffmpeg and Nginx (installed via Homebrew)
 
 ## Table of Contents
 
